@@ -27,15 +27,15 @@ The value-at-risk display (`inventory_value_usd`) helps prioritize response, but
 
 ## 4. Recommended technical stack
 
-Use **R for all statistics**, a **plumber REST API**, and a **React/Vite front end**. This fits the course's React-plus-statistical-tool wording, uses the team's existing R context, and keeps every statistic in a plain, testable `app/qc.R` file.
+Use **Python for all statistical calculations and reliability models**, a **FastAPI REST API**, and a **React/Vite front end**. This keeps every statistic in a plain, testable `app/qc.py` module and exposes the results through a documented API.
 
 ```mermaid
 flowchart LR
-    A[Demo CSVs or user upload] --> B[R validation and QC functions]
-    B --> C[plumber API]
+    A[Demo CSVs or user upload] --> B[Python validation and QC functions]
+    B --> C[FastAPI API]
     C --> D[React dashboard]
-    B --> E[testthat known-answer tests]
-    C --> F[Posit Connect]
+    B --> E[pytest known-answer tests]
+    C --> F[Deployment target to confirm]
     D --> F
 ```
 
@@ -43,13 +43,14 @@ Recommended repository shape after the official starter is forked or cloned:
 
 ```text
 app/
-  qc.R                 # plain statistical functions only
-  plumber.R            # input validation and API routes
+  qc.py                # plain statistical functions only
+  api.py               # FastAPI input validation and routes
   frontend/            # React/Vite application
   testme.*             # one-command local startup
   manifestme.*
   deployme.*
 tests/
+  test_qc.py           # pytest statistical and validation tests
 data/
   stable/
   degrading/
@@ -62,16 +63,20 @@ docs/
 SPEC.md
 CONTRACT.yaml
 README.md
+requirements.txt       # Python dependencies, to be pinned for reproducibility
 ```
 
-If the organizers explicitly confirm that a Shiny-only submission satisfies the current delivery rule, Shiny is a reasonable simplification. Until then, React + plumber is the safer interpretation of the published requirements.
+The plan's prior assumption that Posit Connect can host the complete application has not been verified for this Python/FastAPI and React/Vite stack. Confirm the organizers' required delivery format and an available deployment target before relying on public deployment. Do not treat Posit Connect, or any other host, as confirmed until compatibility and access are checked.
 
 ## 5. MVP user experience
 
 ### Page 1 — Regional overview
 
 - Red/amber/green status for each site and asset.
-- Cards for active excursions, stale sensors, failed generator tests, estimated inventory value at risk, and assets with elevated near-term risk.
+- For each refrigerator, show the latest temperature, minimum, maximum, and mean temperature over the selected display window, plus a temperature trend. State the window and units; show the trend in °C per day when calculated as a time-based slope.
+- Show active excursion duration, refrigerator conditional failure probability over the selected future horizon, and generator next-start failure probability, each with its uncertainty interval and supporting sample size/counts where applicable.
+- Show financial impact as inventory value exposed during an observed excursion or outage. Do not label exposed value as expected or actual loss.
+- Cards for active excursions, stale sensors, failed generator tests, inventory value exposed, and assets with elevated near-term risk.
 - Ranked action table with: asset, issue, evidence, suggested operational follow-up, and timestamp.
 - Clear distinction between:
   - **ALARM:** an observed rule violation now.
@@ -92,6 +97,19 @@ If the organizers explicitly confirm that a Shiny-only submission satisfies the 
 - Preview validation errors before analysis.
 - Display formulas, assumptions, data provenance, and limitations.
 - Download a result table for the demo; no database, login, or live notifications in the MVP.
+
+### MVP metric definitions and units
+
+- **Historical failure frequency:** the descriptive fraction of observed failed starts among all recorded generator start attempts for the selected generator and period: `failed starts / (failed starts + successful starts)`. Report as a proportion or percent with the attempt count and period; it is not the posterior estimate or a future guarantee.
+- **Conditional failure probability over a future horizon:** for a refrigerator, the Weibull probability of failure by age `t + h` conditional on survival to age `t`, as defined in Section 7.2. Report as a probability or percent, with horizon `h` in days, model group, and uncertainty interval. For a generator, report the Beta-binomial posterior probability of failure on the next comparable start; do not imply a time horizon.
+- **Recovery time:** elapsed time from the start of an observed power interruption to restoration of mains power, in minutes or hours. If the interruption is ongoing or its endpoints are missing, report `ongoing` or `unknown`, not an estimated duration. Temperature recovery is a separate measure and must not be conflated with power recovery.
+- **Inventory value exposed:** the documented USD value of inventory associated with an asset during an observed excursion or outage. This is an exposure-prioritization measure, not a loss estimate or disposition decision. State which inventory valuation record and timestamp were used; if unavailable, show `unknown`.
+- **Expected loss:** in a future, defensible model this would be the probability-weighted monetary consequence across specified outcomes, reported in USD for a stated period and scope. It is not calculated in the MVP: multiplying failure probability by inventory value alone is not a defensible loss model. Any future estimate requires an explicit, validated method and documented assumptions about event severity, product disposition, recovery, and financial costs. Do not claim an annual financial-loss prediction without that basis.
+- **Actual loss:** a realized, documented financial amount in USD from an authorized facility accounting or incident record. Do not infer it from exposure or simulated data; omit it when no suitable record is supplied. It is out of scope for the synthetic MVP.
+
+Temperature summaries must name their selected time window and units (°C); excursion duration uses elapsed minutes or hours between observed threshold crossings, with interpolation assumptions documented if used. Missing or insufficient observations must yield `UNKNOWN` rather than a fabricated summary or zero.
+
+The dashboard statistics above are core MVP requirements. Trend is a descriptive time-based slope only when enough appropriately ordered observations exist; a statistical process control (SPC) chart remains a stretch goal.
 
 ## 6. Minimal data contract
 
@@ -127,7 +145,11 @@ Use only data that a real facility could obtain from sensor logs, maintenance re
 | `started` | 0/1 | Outcome of the start attempt |
 | `attempt_type` | `scheduled_test` or `outage` | Context for the attempt |
 
-Thresholds are user-configurable and must never be presented as universal clinical rules. For the red-cell demo, document the source and use an FDA-supported storage range of **1–6 °C**. WHO material describes blood-bank refrigerator operation at **2–6 °C**, so the app should distinguish an operational warning band from the configured product storage limit.
+Thresholds are user-configurable and must never be presented as universal clinical rules. For the red-cell demo, document the source and use an FDA-supported storage range of **1–6 °C**. WHO material describes blood-bank refrigerator operation at **2–6 °C**, so the app should distinguish an operational warning band from the configured product storage limit. Every displayed threshold must show its configured values, units, product context, and documented source. The app is educational decision support, not clinically validated; it must not declare blood safe or unsafe, make product disposition decisions, or replace local procedures/SOPs.
+
+### CSV codebook and README requirements
+
+`data/README.md` is a required MVP codebook. For every field in every CSV, document its meaning, type, units or allowed values, whether it is required, provenance, and how the synthetic value was generated. Explain fixed random seeds and planted scenario behavior. Clearly label every bundled dataset and generated record as synthetic. Also state what real collection would require, including the responsible source system or staff role, timestamp and unit conventions, validation/quality checks, and authorization/privacy review. The repository root `README.md` must explain the project, the synthetic-only status of bundled data, documented setup and run/test commands, and how to reproduce the scenarios from a fresh GitHub clone.
 
 ## 7. Statistical plan
 
@@ -141,6 +163,8 @@ These are deterministic, not predictions:
 - Mark an asset `UNKNOWN`, not `OK`, when required readings are missing or stale.
 - Never infer product disposition. The UI says “review/transfer/escalate per local SOP,” not “discard” or “safe.”
 
+All uploaded and bundled CSVs must be validated before analysis: required columns and types, allowed values and units, parseable timezone-aware timestamps, duplicate rows, chronological ordering where required, missing values, impossible values, and empty files. Return actionable validation messages and do not silently coerce invalid records. Missing required readings, stale sensors, and insufficient history produce `UNKNOWN` or `insufficient history`, not a zero estimate or green status. Define staleness by a configurable threshold and show that threshold and the last-reading time.
+
 ### 7.2 Refrigerator failure prediction — Weibull reliability
 
 Fit a Weibull distribution separately within a defensible `model_group`, using observed failures and right-censored operating intervals.
@@ -152,7 +176,7 @@ P(failure by t+h | survived to t)
   = 1 - exp(-[((t+h)/eta)^beta - (t/eta)^beta])
 ```
 
-Report `beta`, `eta`, number of assets, number of failures, the horizon, the point estimate, and an uncertainty interval. If there are too few events, return `insufficient history` instead of a confident-looking number.
+Report `beta`, `eta`, number of assets, number of failures, the horizon in days, the point estimate, and an uncertainty interval. If there are too few events, return `insufficient history` instead of a confident-looking number. State the uncertainty method and interval level; do not display an interval without its method, and do not imply it captures model misspecification.
 
 Assumptions to display:
 
@@ -175,7 +199,7 @@ For a generator with `f` failed starts and `s` successful starts, use a document
 (1 + f) / (2 + f + s)
 ```
 
-Show a 95% credible interval and counts alongside the probability. This estimate is conditional on future starts being comparable to prior tests; it is not a guarantee.
+Show a 95% credible interval and failed/successful counts alongside the probability. This estimate is conditional on future starts being comparable to prior tests; it is not a guarantee. Keep historical failure frequency visibly distinct from this posterior estimate.
 
 Known-answer test:
 
@@ -184,7 +208,7 @@ Known-answer test:
 
 ### 7.4 Optional stretch statistic
 
-Only after the two reliability functions and their tests pass, add an Individuals/Moving Range or EWMA chart for temperature drift. Account for sampling cadence and explicitly discuss autocorrelation; do not label ordinary sensor noise as independent measurements without checking that assumption.
+**Stretch only:** after the reliability functions, tests, validation, and core dashboard are complete, add an Individuals/Moving Range or EWMA chart for temperature drift. Account for sampling cadence and explicitly discuss autocorrelation; do not label ordinary sensor noise as independent measurements without checking that assumption. Do not add an expected-loss model or blood-product viability model as part of the MVP.
 
 ## 8. Three synthetic demonstration scenarios
 
@@ -194,20 +218,20 @@ All data must be labeled **synthetic**.
 2. **Degrading refrigerator:** rising age/failure risk plus a planted temperature excursion. Expected outcome: the unit ranks first for inspection and its inventory value is shown as exposed.
 3. **Blackout and failed start:** mains power drops and the generator fails to start before temperatures rise. Expected outcome: a critical observed alarm, with the generator history explaining elevated next-start risk.
 
-Use fixed random seeds and record the planted behavior in `data/README.md`. Never describe simulated records as real blood-bank data.
+Use fixed random seeds and record the generation method and planted behavior in the required `data/README.md` codebook. Expected scenario-level test results are: (1) stable: readings remain within configured limits, no active alarm, and no stale-data false green; (2) degrading refrigerator: planted excursion is detected, excursion duration and value exposed are reported, and the refrigerator ranks first for inspection under the documented test setup; (3) blackout with failed generator: outage and failed-start alarm are detected, recovery time is reported only when its endpoints are present, and the generator estimate reflects its recorded outcomes. Never describe simulated records as real blood-bank data. Document any stochastic generation seed so results are reproducible.
 
 ## 9. Test and validation strategy
 
 The build order is statistics first:
 
 1. Unit-test every formula against the known answers above.
-2. Test data validation: required columns, units, timestamp order, duplicate rows, missing values, impossible values, and empty files.
-3. Test scenario expectations: stable has no alarm; degrading has the planted excursion; blackout has the failed-start alarm.
-4. Test API output against direct calls to `qc.R`; the values must match.
+2. Test data validation: required columns, types, units, allowed values, timestamp order, duplicate rows, missing values, stale data, impossible values, and empty files. Verify missing/stale required inputs produce `UNKNOWN` rather than `OK` or a numeric zero.
+3. Test scenario expectations: stable has no alarm; degrading has the planted excursion, duration and inventory value exposed; blackout has the failed-start alarm and only reports recovery time when measurable.
+4. Test API output against direct calls to `qc.py`; the values must match.
 5. Have a teammate who did not write the feature follow `demo/README.md` from a fresh clone.
 6. Test the deployed URL in a logged-out browser.
 
-For each displayed number, the team should be able to answer: input rows used, formula, assumptions, units, and expected behavior when data are missing.
+For each displayed number, the team should be able to answer: input rows used and sample size, formula, assumptions, units, uncertainty interval and method where applicable, and expected behavior when data are missing or stale. Assert the scenario-level outcomes above in automated tests.
 
 ## 10. Work plan and ownership
 
@@ -218,9 +242,9 @@ The official `CONTRACT.yaml` tasks should remain the task ledger. Assign one own
 | Scope, user, and decisions | Product/data lead | Whole team | H-01 |
 | Synthetic data and codebook | Data lead | Statistics lead | H-02 |
 | Reliability functions and tests | Statistics lead | Independent reviewer | H-03 |
-| plumber API and React app | App lead(s) | Statistics lead | H-04 |
+| FastAPI and React app | App lead(s) | Statistics lead | H-04 |
 | Demo walkthrough | UX/demo lead | Teammate unfamiliar with feature | H-05 |
-| Posit Connect deployment | Deployment lead | App lead | H-06 |
+| Deployment target confirmation and deployment | Deployment lead | App lead | H-06 |
 | Public documentation | Documentation lead | Whole team | H-07 |
 | Reproducibility and Devpost | Team coordinator | Whole team | H-08 |
 
@@ -234,7 +258,7 @@ The published schedule runs through **Friday, October 23 at 3:00 PM ET**. Becaus
 
 - Fork/clone the official starter into the team repository.
 - Fill `SPEC.md` together and assign H-01 through H-08.
-- Confirm React + plumber, the exact product threshold used in the demo, and the failure-risk horizon.
+- Confirm Python + FastAPI + React/Vite, the exact product threshold used in the demo, and the failure-risk horizon.
 - Create the three data scenarios and codebook outline.
 - Write formula tests before building interface components.
 
@@ -245,18 +269,18 @@ Exit condition: scope is frozen, data schemas are agreed, and both known-answer 
 - Finish synthetic datasets and codebook.
 - Fit Weibull models with censoring and beta-binomial generator estimates.
 - Complete degenerate-case and validation tests.
-- Expose only tested results through plumber endpoints.
+- Expose only tested results through FastAPI endpoints.
 
 Exit condition: H-02 and H-03 pass their definitions of done.
 
-### Wednesday, October 21 — working vertical slice and first deployment
+### Wednesday, October 21 — working vertical slice and deployment check
 
 - Build regional overview, asset detail, and data/methods views.
 - Wire one scenario end-to-end.
 - Add the remaining two scenarios.
-- Deploy the simplest working version to Posit Connect before styling.
+- Confirm the required delivery format and compatible deployment target; deploy a thin working version only after the target is verified.
 
-Exit condition: one command starts the tool locally; public URL works; app and direct function outputs match.
+Exit condition: one documented command starts the tool locally; deployment target and public URL are verified if required; app and direct function outputs match.
 
 ### Thursday, October 22 — demo, documentation, and hardening
 
@@ -275,14 +299,17 @@ Exit condition: all rubric rows have evidence and no unexplained number appears 
 
 ## 12. Definition of MVP done
 
-- A public React + plumber app runs from one documented command and is deployed.
+- A React + FastAPI app runs from one documented command. If public deployment is required, its compatible target and public URL have been verified.
+- The Python, FastAPI, and React/Vite setup and run steps are documented, and the public GitHub repository supports a fresh-clone reproduction of the tests and synthetic scenarios. Confirm the required public deployment target before claiming a deployed public app.
 - Three synthetic scenarios are included and documented.
+- The dashboard reports the core statistics and metrics defined in Section 5, with units, time windows, sample sizes, uncertainty, and unknown states handled as specified.
+- `data/README.md` documents every CSV field, units, provenance, synthetic generation, and requirements for collecting real data; the root `README.md` documents reproducible setup and use.
 - Current supply-integrity alarms are correct for the planted scenarios.
 - Refrigerator and generator risk functions pass exact known-answer and degenerate-case tests.
 - Missing/stale data produces `UNKNOWN`, never a false green status.
 - Every output shows units, explanation, assumptions, and supporting sample size.
 - A fresh clone passes tests and reproduces the demo.
-- No secrets, patient data, or claims of clinical validation appear in the repository.
+- No secrets, patient data, blood-product viability claims, unsupported annual financial-loss predictions, or claims of clinical validation appear in the repository.
 
 ## 13. Out of scope for this hackathon
 
@@ -301,7 +328,7 @@ Exit condition: all rubric rows have evidence and no unexplained number appears 
 | Synthetic model looks more certain than it is | Label data synthetic; show event counts, uncertainty, and insufficient-data states |
 | Medical threshold is oversimplified | Make limits configurable and cite the product-specific source |
 | Temperature readings are autocorrelated | Keep SPC as stretch; state assumptions and avoid unjustified independence claims |
-| Deployment fails late | Deploy a thin vertical slice on Wednesday |
+| Deployment target is incompatible or unavailable | Confirm delivery requirements and host compatibility early; deploy a thin vertical slice only after verification |
 | Team merge conflicts | One owner per CONTRACT task and path; small reviewed commits |
 | A judge cannot reproduce results | One-command start, pinned dependencies, fresh-clone test, backup demo |
 
@@ -310,10 +337,13 @@ Exit condition: all rubric rows have evidence and no unexplained number appears 
 Limit this meeting to 30 minutes and record the answers in `SPEC.md`:
 
 1. Final team and product names, public repository URL, and task owners.
-2. Confirm React + R/plumber or obtain organizer confirmation for a simpler stack.
+2. Confirm Python + FastAPI + React/Vite and the required submission/deployment format with organizers.
 3. Confirm demo focus: refrigerated red cells versus a broader configurable product model.
 4. Confirm horizons shown (recommended: 7 and 30 days) and minimum event count before estimating risk.
 5. Confirm the local operational action text with a knowledgeable teammate; the app must not invent a clinical disposition rule.
+6. Set temperature-summary windows, sensor-staleness threshold, excursion/grace-period rules, and the minimum observations required for a trend.
+7. Confirm how outage start/restoration times and inventory valuations would be sourced in any future real-data workflow; decide whether actual-loss records are excluded from the MVP as specified.
+8. Select and document the Weibull uncertainty-interval method and event-count threshold; verify the required public delivery format and compatible deployment target with organizers.
 
 ## 16. Sources used for this plan
 
