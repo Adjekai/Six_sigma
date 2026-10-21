@@ -177,6 +177,9 @@ def main() -> int:
             serve()
         elif arguments.action == "data":
             generate_data()
+    except KeyboardInterrupt:
+        print("\nCancelled by user. You can safely rerun the command when ready.", file=sys.stderr)
+        return 130
     except (ProjectError, OSError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
