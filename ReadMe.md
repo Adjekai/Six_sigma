@@ -36,9 +36,9 @@ The frontend does not calculate reliability or financial metrics. It only reques
 
 Requirements:
 
-- Python 3.11 or newer
+- Python 3.12 through 3.15
 - Node.js and npm
-- `make`
+- `make` is optional; the cross-platform helper does not require it
 
 Use the cross-platform helper so macOS and Windows teammates follow the same process.
 

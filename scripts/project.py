@@ -48,7 +48,7 @@ def captured(command: list[str]) -> str:
 
 
 def python_supported() -> bool:
-    return (3, 11) <= sys.version_info[:2] < (3, 15)
+    return (3, 12) <= sys.version_info[:2] < (3, 16)
 
 
 def node_supported(version: str) -> bool:
@@ -68,7 +68,7 @@ def doctor() -> bool:
     print(f"Python: {sys.version.split()[0]} ({sys.executable})")
     if not python_supported():
         ok = False
-        print("  ERROR: Use Python 3.11 through 3.14; Python 3.12 is recommended.")
+        print("  ERROR: Use Python 3.12 through 3.15; Python 3.14 or 3.15 is recommended.")
     else:
         print("  OK")
 
@@ -110,7 +110,7 @@ def doctor() -> bool:
 
 def setup() -> None:
     if not python_supported():
-        raise ProjectError("Use Python 3.11 through 3.14; Python 3.12 is recommended.")
+        raise ProjectError("Use Python 3.12 through 3.15; Python 3.14 or 3.15 is recommended.")
     npm = command_path("npm")
     node = command_path("node")
     node_version = captured([node, "--version"])

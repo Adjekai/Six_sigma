@@ -4,7 +4,7 @@ Do not install project packages globally and do not share a `.venv` or `node_mod
 
 ## Standard versions
 
-- **Python:** 3.11–3.14; Python 3.12 is the recommended team baseline.
+- **Python:** 3.12–3.15; Python 3.14 and 3.15 are both supported team versions.
 - **Node.js:** 20.19+, 22.12+, or a newer major release.
 - **npm:** installed with Node.js.
 - **Git:** required for team collaboration.
@@ -91,7 +91,7 @@ Install Node.js, then completely close and reopen the terminal or IDE.
 
 ### The wrong Python version created `.venv`
 
-Rename the existing `.venv` as a backup, select Python 3.12, and run setup again. Virtual environments are platform-specific and should not be copied between teammates.
+Rename the existing `.venv` as a backup, select Python 3.14 or 3.15, and run setup again. Virtual environments are tied to their Python version and operating system, so teammates should not copy them between computers.
 
 ### `npm ci` says the lockfile and package file disagree
 
