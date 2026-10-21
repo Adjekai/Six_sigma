@@ -40,18 +40,34 @@ Requirements:
 - Node.js and npm
 - `make`
 
-Install the pinned dependencies:
+Use the cross-platform helper so macOS and Windows teammates follow the same process.
+
+macOS:
 
 ```sh
-make setup
+python3 scripts/project.py setup
+```
+
+Windows PowerShell:
+
+```powershell
+py scripts\project.py setup
 ```
 
 ## Run
 
-After installation, one command builds the dashboard and starts FastAPI:
+After installation, one command builds the dashboard and starts FastAPI.
+
+macOS:
 
 ```sh
-make run
+python3 scripts/project.py run
+```
+
+Windows PowerShell:
+
+```powershell
+py scripts\project.py run
 ```
 
 Open <http://127.0.0.1:8000>. API documentation is available at <http://127.0.0.1:8000/docs>.
@@ -59,13 +75,13 @@ Open <http://127.0.0.1:8000>. API documentation is available at <http://127.0.0.
 ## Verify
 
 ```sh
-make test
+python3 scripts/project.py test
 ```
 
 Regenerate the same synthetic datasets with:
 
 ```sh
-make data
+python3 scripts/project.py data
 ```
 
 ## Important definitions
@@ -80,6 +96,7 @@ make data
 ## Documentation
 
 - [Shared interfaces](docs/interfaces.md)
+- [macOS and Windows dependency guide](docs/DEPENDENCIES.md)
 - [Synthetic-data codebook](data/README.md)
 - [Team branch handoff](docs/team-plan.md)
 - [Demo walkthrough](demo/README.md)

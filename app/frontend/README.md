@@ -65,7 +65,9 @@ The warnings section explains limitations such as missing readings, incomplete o
 From the repository root, after setup:
 
 ```sh
-make run
+python3 scripts/project.py run
 ```
+
+On Windows PowerShell, use `py scripts\project.py run`.
 
 Open <http://127.0.0.1:8000>.
