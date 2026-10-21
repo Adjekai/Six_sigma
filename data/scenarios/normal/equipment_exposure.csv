@@ -1,0 +1,3 @@
+equipment_id,site_id,equipment_type,model_group,generator_id,observation_start_utc,observation_end_utc,mechanical_operating_hours
+R-N1,NORTH,refrigerator,CW-100,G-N,2021-10-21T12:00:00Z,2026-10-20T12:00:00Z,15000.0
+R-N2,NORTH,refrigerator,CW-100,G-N,2021-10-21T12:00:00Z,2026-10-20T12:00:00Z,18000.0

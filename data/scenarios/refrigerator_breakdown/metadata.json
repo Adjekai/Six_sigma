@@ -1,0 +1,18 @@
+{
+  "id": "refrigerator_breakdown",
+  "name": "Refrigerator breakdown",
+  "description": "A mechanical failure causes warming, a detected limit breach, recovery, and simulated write-off.",
+  "synthetic": true,
+  "reference_time_utc": "2026-10-20T12:00:00Z",
+  "seed": 2202,
+  "generation_assumptions": [
+    "Illustrative warming profiles are not validated biological or thermal models.",
+    "Failure histories use constant rates within each modeled group.",
+    "All values, events, inventory, and outcomes are synthetic."
+  ],
+  "planted_truth": [
+    "2 mechanical failures / 20,000 operating hours",
+    "R-B1 breaches above 6 C",
+    "$7,500 simulated historical write-off"
+  ]
+}

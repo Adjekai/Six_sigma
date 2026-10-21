@@ -1,0 +1,18 @@
+{
+  "id": "normal",
+  "name": "Normal / resilient",
+  "description": "Temperatures remain within limits and all recorded backup starts succeed.",
+  "synthetic": true,
+  "reference_time_utc": "2026-10-20T12:00:00Z",
+  "seed": 1101,
+  "generation_assumptions": [
+    "Illustrative warming profiles are not validated biological or thermal models.",
+    "Failure histories use constant rates within each modeled group.",
+    "All values, events, inventory, and outcomes are synthetic."
+  ],
+  "planted_truth": [
+    "No current breach",
+    "No failed generator starts",
+    "One historical zero-loss mechanical incident"
+  ]
+}

@@ -1,0 +1,3 @@
+incident_id,refrigerator_id,cause,cooling_loss_utc,observation_end_utc,cooling_restored_utc,blackout_id
+INC-N-BLACKOUT,R-N1,blackout_interruption,2023-10-11T20:00:00Z,2023-10-11T20:30:00Z,2023-10-11T20:10:00Z,BLK-NORTH-10
+INC-N-MECH-OLD,R-N2,mechanical,2026-06-22T09:00:00Z,2026-06-22T12:00:00Z,2026-06-22T11:00:00Z,

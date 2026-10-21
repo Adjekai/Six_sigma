@@ -1,0 +1,4 @@
+incident_id,refrigerator_id,cause,cooling_loss_utc,observation_end_utc,cooling_restored_utc,blackout_id
+INC-O-1,R-O1,blackout_failed_start,2026-10-20T09:00:00Z,2026-10-20T12:00:00Z,2026-10-20T11:00:00Z,BLK-WEST-20
+INC-O-2,R-O2,blackout_failed_start,2026-10-20T09:00:00Z,2026-10-20T12:00:00Z,2026-10-20T11:00:00Z,BLK-WEST-20
+INC-O-3,R-O3,blackout_failed_start,2026-10-20T09:00:00Z,2026-10-20T12:00:00Z,2026-10-20T11:00:00Z,BLK-WEST-20

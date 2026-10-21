@@ -2,3 +2,10 @@
 .Rhistory
 .RData
 .Ruserdata
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+app/frontend/node_modules/
+app/frontend/dist/
+.DS_Store
