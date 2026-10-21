@@ -52,6 +52,5 @@ def dashboard(
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
-frontend_dist = Path(__file__).resolve().parent / "frontend" / "dist"
-if frontend_dist.exists():
-    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
+frontend = Path(__file__).resolve().parent / "frontend"
+app.mount("/", StaticFiles(directory=frontend, html=True), name="frontend")

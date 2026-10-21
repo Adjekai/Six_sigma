@@ -1,6 +1,6 @@
 # BloodWatch shared interfaces
 
-This file is the contract between the synthetic-data generator, Python analysis, FastAPI service, and React dashboard. Interface changes should be agreed before data, statistics, and display branches edit them independently.
+This file is the contract between the synthetic-data generator, Python analysis, FastAPI service, and browser-native dashboard. Interface changes should be agreed before data, statistics, and display branches edit them independently.
 
 All timestamps are ISO-8601 UTC strings. All demonstration records are synthetic.
 

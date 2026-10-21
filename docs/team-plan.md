@@ -1,6 +1,6 @@
 # BloodWatch team handoff
 
-The current foundation is intentionally small: generated CSV scenarios → plain Python functions → FastAPI JSON → React display.
+The current foundation is intentionally small: generated CSV scenarios → plain Python functions → FastAPI JSON → browser-native display.
 
 ## Shared foundation ownership
 

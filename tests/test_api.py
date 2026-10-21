@@ -10,6 +10,17 @@ def test_health():
     assert client.get("/health").json() == {"status": "ok", "service": "bloodwatch-api"}
 
 
+def test_dashboard_frontend_is_served_without_a_build_step():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "BloodWatch" in response.text
+    assert "/app.js" in response.text
+
+    javascript = client.get("/app.js")
+    assert javascript.status_code == 200
+    assert "loadDashboard" in javascript.text
+
+
 def test_scenarios():
     response = client.get("/api/scenarios")
     assert response.status_code == 200

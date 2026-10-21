@@ -1,6 +1,6 @@
 # Blood Bank Supply Integrity Tool — Team Project Plan
 
-> **Scope update:** The attached BloodWatch starter prompt supersedes this early planning draft where they differ. The active implementation uses React/Vite, Python/FastAPI, a constant-rate mechanical failure model, and a per-blackout-demand generator model. See [`interfaces.md`](interfaces.md) and [`team-plan.md`](team-plan.md).
+> **Scope update:** This is an early planning draft. The active implementation now uses a Node-independent browser-native dashboard with Python/FastAPI, a constant-rate mechanical failure model, and a per-blackout-demand generator model. See [`interfaces.md`](interfaces.md) and [`team-plan.md`](team-plan.md).
 
 Working title: **ColdGuard** (placeholder; the team can rename it)
 
