@@ -1,6 +1,6 @@
 # BloodWatch
 
-BloodWatch is a small React + FastAPI prototype for regional blood-bank supervisors. It separates current storage-condition evidence, equipment reliability estimates, and recorded synthetic financial outcomes so that every displayed number can be explained.
+BloodWatch is a small Python + FastAPI prototype for regional blood-bank supervisors. Its browser-native dashboard has no Node.js dependency. It separates current storage-condition evidence, equipment reliability estimates, and recorded synthetic financial outcomes so that every displayed number can be explained.
 
 Team members: Audrey Sakcey, Isabelle Seidenberg, Jasmine Tamous, Ameera El'Amin-White, Jonathan EngleA
 
@@ -25,7 +25,7 @@ scripts/generate_scenarios.py
 app/bloodwatch/             plain Python analysis modules
 app/qc.py                   public statistical interface
 app/api.py                  FastAPI routes
-app/frontend/               React/Vite dashboard
+app/frontend/               browser-native HTML/CSS/JavaScript dashboard
 tests/                      statistical, scenario, and API checks
 docs/interfaces.md          shared schema and JSON contract
 ```
@@ -36,22 +36,37 @@ The frontend does not calculate reliability or financial metrics. It only reques
 
 Requirements:
 
-- Python 3.11 or newer
-- Node.js and npm
-- `make`
+- Python 3.12 through 3.15
+- `make` is optional; the cross-platform helper does not require it
 
-Install the pinned dependencies:
+Use the cross-platform helper so macOS and Windows teammates follow the same process.
+
+macOS:
 
 ```sh
-make setup
+python3 scripts/project.py setup
+```
+
+Windows PowerShell:
+
+```powershell
+py scripts\project.py setup
 ```
 
 ## Run
 
-After installation, one command builds the dashboard and starts FastAPI:
+After installation, one command starts FastAPI and serves the dashboard.
+
+macOS:
 
 ```sh
-make run
+python3 scripts/project.py run
+```
+
+Windows PowerShell:
+
+```powershell
+py scripts\project.py run
 ```
 
 Open <http://127.0.0.1:8000>. API documentation is available at <http://127.0.0.1:8000/docs>.
@@ -59,13 +74,13 @@ Open <http://127.0.0.1:8000>. API documentation is available at <http://127.0.0.
 ## Verify
 
 ```sh
-make test
+python3 scripts/project.py test
 ```
 
 Regenerate the same synthetic datasets with:
 
 ```sh
-make data
+python3 scripts/project.py data
 ```
 
 ## Important definitions
@@ -80,6 +95,7 @@ make data
 ## Documentation
 
 - [Shared interfaces](docs/interfaces.md)
+- [macOS and Windows dependency guide](docs/DEPENDENCIES.md)
 - [Synthetic-data codebook](data/README.md)
 - [Team branch handoff](docs/team-plan.md)
 - [Demo walkthrough](demo/README.md)

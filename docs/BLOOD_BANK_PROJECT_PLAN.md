@@ -1,5 +1,7 @@
 # Blood Bank Supply Integrity Tool — Team Project Plan
 
+> **Scope update:** This is an early planning draft. The active implementation now uses a Node-independent browser-native dashboard with Python/FastAPI, a constant-rate mechanical failure model, and a per-blackout-demand generator model. See [`interfaces.md`](interfaces.md) and [`team-plan.md`](team-plan.md).
+
 Working title: **ColdGuard** (placeholder; the team can rename it)
 
 ## 1. One-sentence product definition
@@ -322,4 +324,3 @@ Limit this meeting to 30 minutes and record the answers in `SPEC.md`:
 - [Hackathon prompts and example statistical techniques](https://github.com/timothyfraser/sixsigmahackathon/blob/main/docs/prompts.md)
 - [FDA example supporting 1–6 °C storage for red blood cells](https://www.fda.gov/vaccines-blood-biologics/approved-blood-products/solx-system)
 - [WHO manual on management, maintenance, and use of blood cold-chain equipment](https://www.who.int/publications/i/item/92-4-154673-5)
-

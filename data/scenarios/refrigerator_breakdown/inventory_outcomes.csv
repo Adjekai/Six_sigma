@@ -1,0 +1,5 @@
+record_type,as_of_utc,incident_id,lot_id,refrigerator_id,bags_present,value_per_bag_usd,bags_transferred,bags_written_off
+current_snapshot,2026-10-20T12:00:00Z,,LOT-R-B1,R-B1,50,250.00,,
+current_snapshot,2026-10-20T12:00:00Z,,LOT-R-B2,R-B2,32,250.00,,
+incident_outcome,2026-10-20T11:00:00Z,INC-B-MECH-1,LOT-B-LOSS,R-B1,50,250.00,20,30
+incident_outcome,2026-09-10T12:00:00Z,INC-B-MECH-2,LOT-B-ZERO,R-B2,25,250.00,25,0
