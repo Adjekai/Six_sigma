@@ -1,10 +1,8 @@
 # BloodWatch
 
-BloodWatch is a Python and FastAPI dashboard for synthetic blood-storage data.
+BloodWatch is a Python and FastAPI dashboard for blood-storage data.
 
-Team members: Audrey Sakcey, Isabelle Seidenberg, Jasmine Tamous, Ameera El'Amin-White, Jonathan EngleA
-
-> All records are synthetic. The dashboard describes storage conditions and equipment reliability; it does not determine whether blood is clinically usable.
+Team members: Audrey Sakcey, Isabelle Seidenberg, Jasmine Tamous, Ameera El'Amin-White, Jonathan Engle
 
 ## Run the dashboard
 
@@ -70,7 +68,7 @@ Current inventory and historical incident outcomes. Real sources would be invent
 
 ## 1. Temperature
 
-The dashboard shows the latest temperature, mean, range, sample standard deviation, and selected history for one refrigerator.
+The dashboard shows the latest temperature, mean, range, sample standard deviation, and selected history for one refrigerator. The file contains the normal baseline, the latest 24-hour history, and a short 15-minute reading sequence through every older cooling interruption.
 
 ### `temperatures.csv`
 
@@ -162,8 +160,8 @@ These values are calculated from valid rows in `temperatures.csv`. Pre-incident 
 | Metric | Meaning |
 |---|---|
 | Mean | Average temperature |
-| Sample SD | Spread of individual readings |
-| Standard error | Sample SD ÷ square root of the reading count |
+| Sample standard deviation | Spread of individual readings |
+| Standard error | Sample standard deviation ÷ square root of the reading count |
 | Control limits | Individuals-chart limits estimated from moving ranges |
 | Control signal | Reading outside the estimated control limits |
 | Cp / Cpk | Potential and centered capability using within-process variation |

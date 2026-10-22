@@ -29,6 +29,7 @@ def summarize_breach_and_recovery(
                 and row["reading_valid"]
                 and row["temperature_c"] is not None
                 and incident["cooling_loss"] <= row["timestamp"] <= end
+                and row.get("related_failure_event_id") == incident.get("failure_event_id")
             ),
             key=lambda row: row["timestamp"],
         )
@@ -57,6 +58,7 @@ def summarize_breach_and_recovery(
         per_incident.append(
             {
                 "incident_id": incident["incident_id"],
+                "failure_event_id": incident.get("failure_event_id"),
                 "refrigerator_id": incident["refrigerator_id"],
                 "cause": incident["cause"],
                 "cooling_loss_utc": incident["cooling_loss"].isoformat(),

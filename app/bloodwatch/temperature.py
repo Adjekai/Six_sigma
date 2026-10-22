@@ -9,22 +9,32 @@ from .common import warning
 
 
 def analyze_temperature_process(
-    rows: list[dict[str, Any]],
+    displayed_rows: list[dict[str, Any]],
+    baseline_rows: list[dict[str, Any]],
+    overall_rows: list[dict[str, Any]],
     lower_limit_c: float = 1.0,
     upper_limit_c: float = 6.0,
-    baseline_end: datetime | None = None,
 ) -> dict[str, Any]:
-    valid = sorted(
-        (row for row in rows if row["reading_valid"] and row["temperature_c"] is not None),
+    displayed = sorted(
+        (row for row in displayed_rows if row["reading_valid"] and row["temperature_c"] is not None),
         key=lambda row: row["timestamp"],
     )
-    baseline = [row for row in valid if baseline_end is None or row["timestamp"] < baseline_end]
-    values = [row["temperature_c"] for row in valid]
+    baseline = sorted(
+        (row for row in baseline_rows if row["reading_valid"] and row["temperature_c"] is not None),
+        key=lambda row: row["timestamp"],
+    )
+    overall = sorted(
+        (row for row in overall_rows if row["reading_valid"] and row["temperature_c"] is not None),
+        key=lambda row: row["timestamp"],
+    )
+    displayed_values = [row["temperature_c"] for row in displayed]
     baseline_values = [row["temperature_c"] for row in baseline]
+    overall_values = [row["temperature_c"] for row in overall]
     result: dict[str, Any] = {
-        "baseline_source": "pre_incident" if baseline_end is not None else "selected_window",
+        "baseline_source": "documented_normal_operation",
         "baseline_count": len(baseline_values),
-        "standard_error_c": stdev(values) / sqrt(len(values)) if len(values) > 1 else None,
+        "overall_count": len(overall_values),
+        "standard_error_c": stdev(displayed_values) / sqrt(len(displayed_values)) if len(displayed_values) > 1 else None,
         "center_line_c": None,
         "lower_control_limit_c": None,
         "upper_control_limit_c": None,
@@ -34,6 +44,8 @@ def analyze_temperature_process(
         "cpk": None,
         "pp": None,
         "ppk": None,
+        "capability_status": "unsupported",
+        "capability_explanation": "At least two valid baseline readings are required.",
     }
     if len(baseline_values) < 2:
         return result
@@ -43,13 +55,13 @@ def analyze_temperature_process(
     center = mean(baseline_values)
     lower_control = center - 3 * within_sigma
     upper_control = center + 3 * within_sigma
-    overall_sigma = stdev(values) if len(values) > 1 else None
+    overall_sigma = stdev(overall_values) if len(overall_values) > 1 else None
     result.update(
         {
             "center_line_c": center,
             "lower_control_limit_c": lower_control,
             "upper_control_limit_c": upper_control,
-            "out_of_control_count": sum(value < lower_control or value > upper_control for value in values),
+            "out_of_control_count": sum(value < lower_control or value > upper_control for value in displayed_values),
             "within_sigma_c": within_sigma,
         }
     )
@@ -59,13 +71,23 @@ def analyze_temperature_process(
             (upper_limit_c - center) / (3 * within_sigma),
             (center - lower_limit_c) / (3 * within_sigma),
         )
+        result["capability_status"] = "estimated"
+        result["capability_explanation"] = "Cp/Cpk use the fixed normal baseline; Pp/Ppk use the complete operational temperature history."
+    else:
+        result["capability_explanation"] = "Capability is unsupported because the baseline has no measurable variation."
     if overall_sigma and overall_sigma > 0:
-        overall_mean = mean(values)
+        overall_mean = mean(overall_values)
         result["pp"] = (upper_limit_c - lower_limit_c) / (6 * overall_sigma)
         result["ppk"] = min(
             (upper_limit_c - overall_mean) / (3 * overall_sigma),
             (overall_mean - lower_limit_c) / (3 * overall_sigma),
         )
+    elif len(overall_values) < 2:
+        result["capability_status"] = "unsupported"
+        result["capability_explanation"] = "Pp/Ppk require at least two valid overall observations."
+    else:
+        result["capability_status"] = "unsupported"
+        result["capability_explanation"] = "Pp/Ppk are unsupported because the overall history has no measurable variation."
     return result
 
 

@@ -1,5 +1,5 @@
 const root = document.querySelector('#root');
-const state = { scenarios: [], scenario: 'normal', refrigeratorId: '', horizonDays: 30, windowHours: 6, data: null, error: '', busy: false, request: 0 };
+const state = { refrigeratorId: '', availableRefrigerators: [], horizonDays: 30, windowHours: 6, data: null, error: '', busy: false, request: 0 };
 const esc = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
 const num = (v, digits = 2) => v == null ? 'Not enough data' : Number(v).toLocaleString('en-US', {maximumFractionDigits: digits});
 const pct = v => v == null ? 'Not enough data' : `${num(v * 100, 1)}%`;
@@ -25,7 +25,7 @@ async function getJson(url) {
   return body;
 }
 
-function lineChart(points, {label, xLabel, yLabel, lower, upper, probability = false, marker = null, center = null, limitText = 'limit'}) {
+function lineChart(points, {label, xLabel, yLabel, lower, upper, probability = false, markers = [], center = null, limitText = 'limit'}) {
   if (!points.length) return '<p class="empty">No recorded values to plot.</p>';
   const w=850, h=270, l=65, r=25, top=22, bottom=52;
   const valid=points.filter(p=>p.y!=null);
@@ -50,8 +50,8 @@ function lineChart(points, {label, xLabel, yLabel, lower, upper, probability = f
   }
   const band=lower==null?'':`<rect class="limit-band" x="${l}" y="${Y(upper)}" width="${w-l-r}" height="${Y(lower)-Y(upper)}"/>${[lower,upper].map(v=>`<line class="storage-line" x1="${l}" x2="${w-r}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${w-r-4}" y="${Y(v)-5}" text-anchor="end">${num(v)} °C ${limitText}</text>`).join('')}`;
   const centerLine=center==null?'':`<line class="center-line" x1="${l}" x2="${w-r}" y1="${Y(center)}" y2="${Y(center)}"/><text x="${w-r-4}" y="${Y(center)-5}" text-anchor="end">${num(center)} °C center</text>`;
-  const event=marker==null||marker<xmin||marker>xmax?'':`<line class="event-line" x1="${X(marker)}" x2="${X(marker)}" y1="${top}" y2="${h-bottom}"/><text x="${Math.min(X(marker)+5,w-150)}" y="${top+12}">Cooling lost</text>`;
-  return `<div class="chart-wrap"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(label)}"><title>${esc(label)}</title>${band}${lines}${centerLine}${event}<path d="${path}" class="temperature-line"/>${valid.length===1?`<circle cx="${X(valid[0].x)}" cy="${Y(valid[0].y)}" r="4" class="point"/>`:''}<text x="15" y="15">${esc(yLabel)}</text><text x="${w/2}" y="${h-4}" text-anchor="middle">${esc(xLabel)}</text></svg></div>`;
+  const events=markers.filter(event=>event.x>=xmin&&event.x<=xmax).map((event,index)=>`<line class="event-line" x1="${X(event.x)}" x2="${X(event.x)}" y1="${top}" y2="${h-bottom}"/><text x="${Math.min(X(event.x)+5,w-175)}" y="${top+12+index%2*14}">${esc(event.label)}</text>`).join('');
+  return `<div class="chart-wrap"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(label)}"><title>${esc(label)}</title>${band}${lines}${centerLine}${events}<path d="${path}" class="temperature-line"/>${valid.length===1?`<circle cx="${X(valid[0].x)}" cy="${Y(valid[0].y)}" r="4" class="point"/>`:''}<text x="15" y="15">${esc(yLabel)}</text><text x="${w/2}" y="${h-4}" text-anchor="middle">${esc(xLabel)}</text></svg></div>`;
 }
 
 function overview(data) {
@@ -65,52 +65,53 @@ function overview(data) {
   const detailed=incident.incidents;
   const latest=detailed.filter(row=>row.first_breach_utc).sort((a,b)=>a.cooling_loss_utc.localeCompare(b.cooling_loss_utc)).at(-1);
   const series=data.conditions.temperature_series.map(row=>({x:Date.parse(row.timestamp_utc),y:row.reading_valid?row.temperature_c:null})).sort((a,b)=>a.x-b.x);
-  const shownIncident=detailed.filter(row=>Date.parse(row.cooling_loss_utc)>=series[0]?.x && Date.parse(row.cooling_loss_utc)<=series.at(-1)?.x).at(-1);
+  const visibleIncidents=detailed.filter(row=>Date.parse(row.cooling_loss_utc)>=series[0]?.x && Date.parse(row.cooling_loss_utc)<=series.at(-1)?.x);
+  const coolingMarkers=visibleIncidents.map(row=>({x:Date.parse(row.cooling_loss_utc),label:row.cause==='mechanical'?`${row.incident_id}: refrigerator failure`:`${row.incident_id}: generator start failure`}));
   const status=s.state==='within_limits'?'Within range':s.state==='unknown'?'Unknown':'Review required';
-  const rows=detailed.map(row=>`<tr><td>${esc(row.incident_id)}</td><td>${row.breach_status==='breached'?minutes(row.observed_hours_to_breach_or_censoring):row.breach_status==='unknown'?'Temperature history missing':'Stayed within range until follow-up ended'}</td><td>${minutes(row.recovery_hours)}</td></tr>`).join('');
+  const rows=detailed.map(row=>`<tr><td><strong>${row.cause==='mechanical'?'Refrigerator mechanical failure':'Backup generator failed to start'}</strong><br><small>Event ${esc(row.incident_id)}</small></td><td>${row.breach_status==='breached'?minutes(row.observed_hours_to_breach_or_censoring):row.breach_status==='unknown'?'No matching temperature readings':'No reading outside 1–6 °C before recovery'}</td><td>${minutes(row.recovery_hours)}</td></tr>`).join('');
   const zeroFailures=fridge.failures===0;
-  const normalScenario=data.scenario.id==='normal';
-  const missingBreachValue=normalScenario?'No out-of-range reading':'Insufficient observations';
-  const missingBreachNote=normalScenario?'Normal scenario · no time to calculate':'No out-of-range time observed';
+  const missingBreachValue='No out-of-range reading';
+  const missingBreachNote='No observed out-of-range time';
   const within=equipment.filter(row=>row.status==='within_limits').length;
   const review=equipment.filter(row=>row.status==='review_required').length;
   const unknown=equipment.filter(row=>row.status==='unknown').length;
   const fullestInventory=Math.max(...inventory.by_refrigerator.map(row=>row.bags_present),1);
   const inventoryRows=inventory.by_refrigerator.map(row=>`<tr><td><strong>${esc(refrigeratorName(row.refrigerator_id))}</strong><br><small>${esc(refrigeratorCode(row.refrigerator_id))}</small></td><td><div class="blood-level" title="${num(row.bags_present,0)} bags; relative to the fullest refrigerator"><span class="blood-level-fill" style="width:${row.bags_present/fullestInventory*100}%"></span><strong>${num(row.bags_present,0)} bags</strong></div></td><td>${row.lot_count}</td><td>${usd(row.inventory_value_usd)}</td></tr>`).join('');
-  return `<section class="panel overview-panel"><h2>Overview</h2>
-    <div class="metric-grid five">
+  const overviewPanel=`<section class="panel overview-panel"><h2>Overview</h2>
+    <div class="metric-grid four">
       ${card('Inventory',`${num(inventory.bags_present,0)} bags`,`${inventory.lot_count} lots · ${usd(inventory.inventory_value_usd)}`)}
       ${card('Storage range',`${s.lower_limit_c}–${s.upper_limit_c} °C`,'Refrigerated blood')}
       ${card('Refrigerators',`${within} of ${equipment.length} within range`,review||unknown?`${review} need review · ${unknown} unknown`:'All refrigerators')}
       ${card('Backup power',`${data.reliability.generators.length} backup generator`,`Supports all ${equipment.length} refrigerators`)}
-      ${card('Currently viewing',esc(refrigeratorName(data.selection.refrigerator_id)),`ID ${esc(refrigeratorCode(data.selection.refrigerator_id))}`)}
     </div>
     <h3>Inventory by refrigerator</h3>
     <div class="table-wrap"><table><thead><tr><th>Refrigerator</th><th>Relative inventory</th><th>Lots</th><th>Value</th></tr></thead><tbody>${inventoryRows}</tbody></table></div>
-  </section>
-  <section class="panel">${sectionTitle(1,'Temperature')}
+  </section>`;
+  const sections=`<section class="panel">${sectionTitle(1,'Temperature')}
     <div class="metric-grid three">
       ${card('Latest',s.latest_temperature_c==null?'Unknown':`${num(s.latest_temperature_c)} °C`,`${esc(status)} · ${s.latest_timestamp_utc?clock(s.latest_timestamp_utc)+' UTC':''}`)}
       ${card('Average',`${num(s.mean_c)} °C`,`${num(s.minimum_c)}–${num(s.maximum_c)} °C`)}
-      ${card('Sample SD',s.standard_deviation_c==null?'Not enough data':`${num(s.standard_deviation_c)} °C`,`${s.valid_count} readings · ${s.missing_or_invalid_count} missing`)}
+      ${card('Sample standard deviation',s.standard_deviation_c==null?'Not enough data':`${num(s.standard_deviation_c)} °C`,'Variation among valid readings')}
     </div>
-    ${lineChart(series,{label:'Recorded temperature over time with 1–6 °C storage limits',xLabel:'Recorded time (UTC)',yLabel:'Temperature (°C)',lower:s.lower_limit_c,upper:s.upper_limit_c,marker:shownIncident?Date.parse(shownIncident.cooling_loss_utc):null})}
+    ${lineChart(series,{label:'Recorded temperature over time with 1–6 °C storage limits and cooling-loss events',xLabel:'Recorded time (UTC)',yLabel:'Temperature (°C)',lower:s.lower_limit_c,upper:s.upper_limit_c,markers:coolingMarkers})}
     <p class="source"><a href="https://www.law.cornell.edu/cfr/text/21/640.11" target="_blank" rel="noopener">1–6 °C storage reference</a></p>
   </section>
-  <section class="panel">${sectionTitle(2,'Cooling loss to out-of-range temperature')}
-    <div class="breach-definition"><span>Cooling fails</span><strong aria-hidden="true">→</strong><span>First reading outside 1–6 °C</span></div>
+  <section class="panel">${sectionTitle(2,'Cooling interruptions')}
+    <p class="plain-note">For each interruption, BloodWatch records when cooling stopped, when temperature first moved outside 1–6 °C, and when cooling was restored.</p>
+    <div class="breach-definition"><span>Cooling lost</span><strong aria-hidden="true">→</strong><span>First reading outside 1–6 °C</span><strong aria-hidden="true">→</strong><span>Cooling restored</span></div>
     <div class="metric-grid two">
-      ${card('Most recent time',latest?minutes(latest.observed_hours_to_breach_or_censoring):missingBreachValue,latest?esc(latest.incident_id):missingBreachNote)}
-      ${card('Average time',incident.mean_observed_hours_to_breach_breached_only==null?missingBreachValue:minutes(incident.mean_observed_hours_to_breach_breached_only),incident.breached_count?`${incident.breached_count} out-of-range incidents`:missingBreachNote)}
+      ${card('Most recent limit crossing',latest?minutes(latest.observed_hours_to_breach_or_censoring):missingBreachValue,latest?`${latest.cause==='mechanical'?'Refrigerator failure':'Generator start failure'} · ${esc(latest.incident_id)}`:missingBreachNote)}
+      ${card('Average limit-crossing time',incident.mean_observed_hours_to_breach_breached_only==null?missingBreachValue:minutes(incident.mean_observed_hours_to_breach_breached_only),incident.breached_count?`Across ${incident.breached_count} interruptions that crossed the storage range`:missingBreachNote)}
     </div>
-    <p class="plain-note">${incident.unbreached_censored_count} stayed within range · ${incident.unknown_count} missing histories</p>
-    <details><summary>See incident times and recovery</summary>${rows?`<div class="table-wrap"><table><thead><tr><th>Incident</th><th>Cooling loss to first out-of-range reading</th><th>Cooling restored after</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p>No recorded incidents for this refrigerator.</p>'}<p class="plain-note">Restoring cooling and reaching the temperature limit are different events. These data show storage-limit crossings, not a measured time when blood becomes biologically unusable. Missing samples limit what can be inferred between readings.</p></details>
+    <p class="plain-note">${detailed.length} recorded interruptions · ${incident.breached_count} crossed 1–6 °C · ${incident.unbreached_censored_count} stayed within range until recovery · ${incident.unknown_count} lack matching temperature readings</p>
+    <details><summary>See every interruption and recovery time</summary>${rows?`<div class="table-wrap"><table><thead><tr><th>Interruption</th><th>Cooling loss to first reading outside 1–6 °C</th><th>Cooling loss to restoration</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p>No recorded cooling interruptions for this refrigerator.</p>'}<p class="plain-note">A limit crossing is an observed storage-temperature event, not a measurement of when blood becomes biologically unusable.</p></details>
   </section>
   <section class="panel">${sectionTitle(3,'Failure risk')}
-    <label class="inline-control" for="horizon">Operating period <select id="horizon">${[7,30,90].map(days=>`<option value="${days}"${days===state.horizonDays?' selected':''}>${days} days</option>`).join('')}</select></label>
-    <div class="metric-grid two">
-      ${card('Refrigerator failure',zeroFailures?'No failures observed':pct(fridge.failure_probability),`${fridge.failures} failures · ${num(fridge.exposure_hours,0)} hours · ${esc(fridge.model_group)}`)}
-      ${card('Backup generator failures',`${generator.failed_demands} of ${generator.known_demands}`,generator.failed_demands===0?'No failed starts during blackouts':`${pct(generator.failed_start_probability)} of blackout starts failed`)}
+    <div class="metric-grid four">
+      ${card('Refrigerator mechanical failures',num(fridge.failures,0),`${num(fridge.exposure_hours,0)} observed operating hours · blackouts excluded`)}
+      ${card('Refrigerator failure probability',zeroFailures?'No failures observed':pct(fridge.failure_probability),`Within the selected ${state.horizonDays}-day forecast period`)}
+      ${card('Generator failed starts',`${generator.failed_demands} of ${generator.known_demands}`,`${generator.successful_demands} successful starts · ${generator.unknown_demands} unknown excluded`)}
+      ${card('Generator failed-start probability',pct(generator.failed_start_probability),'Failed starts ÷ known blackout demands')}
     </div>
     ${zeroFailures?`<p class="plain-note">95% upper rate: ${num(fridge.rate_interval_95.upper,6)} per hour</p>`:lineChart(fridge.cdf.map(p=>({x:p.operating_hours/24,y:p.failure_probability})),{label:'Probability of a refrigerator mechanical failure by operating time',xLabel:'Future operating time (days)',yLabel:'Failure probability F(t)',probability:true})}
   </section>
@@ -127,26 +128,32 @@ function overview(data) {
   <section class="panel">${sectionTitle(5,'Process analysis')}
     <div class="metric-grid three">
       ${card('Standard error',process.standard_error_c==null?'Unavailable':`${num(process.standard_error_c,3)} °C`,'s ÷ √n')}
-      ${card('Control limits',process.lower_control_limit_c==null?'Unavailable':`${num(process.lower_control_limit_c)}–${num(process.upper_control_limit_c)} °C`,`${process.baseline_count} ${process.baseline_source==='pre_incident'?'pre-incident':'window'} readings`)}
+      ${card('Control limits',process.lower_control_limit_c==null?'Unavailable':`${num(process.lower_control_limit_c)}–${num(process.upper_control_limit_c)} °C`,`${process.baseline_count} fixed normal-baseline readings`)}
       ${card('Control signals',process.out_of_control_count==null?'Unavailable':num(process.out_of_control_count,0),'Points outside control limits')}
       ${card('Cp',num(process.cp),'Potential capability')}
       ${card('Cpk',num(process.cpk),'Centered capability')}
       ${card('Pp / Ppk',`${num(process.pp)} / ${num(process.ppk)}`,'Overall performance')}
     </div>
-    ${process.lower_control_limit_c==null?'':lineChart(series,{label:'Individuals control chart',xLabel:'Recorded time (UTC)',yLabel:'Temperature (°C)',lower:process.lower_control_limit_c,upper:process.upper_control_limit_c,center:process.center_line_c,limitText:'control limit',marker:shownIncident?Date.parse(shownIncident.cooling_loss_utc):null})}
-    <p class="plain-note">Control limits: baseline behavior · Storage limits: ${s.lower_limit_c}–${s.upper_limit_c} °C</p>
+    ${process.lower_control_limit_c==null?'':lineChart(series,{label:'Individuals control chart with cooling-loss events',xLabel:'Recorded time (UTC)',yLabel:'Temperature (°C)',lower:process.lower_control_limit_c,upper:process.upper_control_limit_c,center:process.center_line_c,limitText:'control limit',markers:coolingMarkers})}
+    <p class="plain-note">Control limits: fixed normal behavior · Storage specifications: ${s.lower_limit_c}–${s.upper_limit_c} °C</p>
+    <p class="plain-note">${esc(process.capability_explanation)}</p>
   </section>
   ${data.warnings.length?`<details class="warnings"><summary>Data limitations (${data.warnings.length})</summary><ul>${data.warnings.map(w=>`<li>${esc(w.message)}</li>`).join('')}</ul></details>`:''}`;
+  return {overviewPanel,sections};
 }
 
 function render() {
   const data=state.data;
-  const fridgeOptions=(data?.selection.available_refrigerators||[]).map(id=>`<option value="${esc(id)}"${id===(state.refrigeratorId||data?.selection.refrigerator_id)?' selected':''}>${esc(refrigeratorName(id))} (${esc(refrigeratorCode(id))})</option>`).join('');
+  const content=data?overview(data):null;
+  const selectedRefrigerator=state.refrigeratorId||data?.selection.refrigerator_id||'';
+  const fridgeOptions=state.availableRefrigerators.length
+    ? state.availableRefrigerators.map(id=>`<option value="${esc(id)}"${id===selectedRefrigerator?' selected':''}>${esc(refrigeratorName(id))} (${esc(refrigeratorCode(id))})</option>`).join('')
+    : `<option value="">${state.error?'Refrigerators unavailable':'Loading refrigerators…'}</option>`;
   root.innerHTML=`<main><header class="masthead"><div><p class="eyebrow">Storage · response · reliability</p><h1>BloodWatch</h1></div></header>
-    <section class="controls" aria-label="Dashboard controls"><label>Choose a scenario<select id="scenario" ${state.busy?'disabled':''}>${state.scenarios.map(s=>`<option value="${esc(s.id)}"${s.id===state.scenario?' selected':''}>${esc(s.name)}</option>`).join('')}</select></label><label>Refrigerator<select id="refrigerator" ${state.busy?'disabled':''}>${fridgeOptions}</select></label><label>Temperature history<select id="window" ${state.busy?'disabled':''}>${[6,24].map(v=>`<option value="${v}"${v===state.windowHours?' selected':''}>Last ${v} hours</option>`).join('')}</select></label></section>
-    <div aria-live="polite">${state.error?`<p class="error" role="alert">${esc(state.error)}</p>`:state.busy?'<p class="loading">Updating analysis…</p>':data?`<p class="context">Current time: <span id="current-time">${esc(currentTimestamp())}</span></p>${overview(data)}`:'<p class="loading">Loading dashboard…</p>'}</div>
+    ${content?.overviewPanel||''}
+    <section class="controls" aria-label="Dashboard controls"><label>Refrigerator<select id="refrigerator" ${state.busy?'disabled':''}>${fridgeOptions}</select></label><label>Temperature history<select id="window" ${state.busy?'disabled':''}>${[6,24].map(v=>`<option value="${v}"${v===state.windowHours?' selected':''}>Last ${v} hours</option>`).join('')}</select></label><label>Operating period<select id="horizon" ${state.busy?'disabled':''}>${[7,30,90].map(days=>`<option value="${days}"${days===state.horizonDays?' selected':''}>${days} days</option>`).join('')}</select></label></section>
+    <div aria-live="polite">${state.error?`<p class="error" role="alert">${esc(state.error)}</p>`:state.busy?'<p class="loading">Updating analysis…</p>':content?`<p class="context">Current time: <span id="current-time">${esc(currentTimestamp())}</span></p>${content.sections}`:'<p class="loading">Loading dashboard…</p>'}</div>
     <footer>Synthetic educational data. Storage breaches require review.</footer></main>`;
-  root.querySelector('#scenario').addEventListener('change',e=>{state.scenario=e.target.value;state.refrigeratorId='';loadDashboard();});
   root.querySelector('#refrigerator').addEventListener('change',e=>{state.refrigeratorId=e.target.value;loadDashboard();});
   root.querySelector('#window').addEventListener('change',e=>{state.windowHours=Number(e.target.value);loadDashboard();});
   root.querySelector('#horizon')?.addEventListener('change',e=>{state.horizonDays=Number(e.target.value);loadDashboard();});
@@ -155,14 +162,14 @@ function render() {
 async function loadDashboard() {
   const request=++state.request;
   state.busy=true; state.error=''; render();
-  const params=new URLSearchParams({scenario:state.scenario,horizon_operating_days:String(state.horizonDays),temperature_window_hours:String(state.windowHours)});
+  const params=new URLSearchParams({horizon_operating_days:String(state.horizonDays),temperature_window_hours:String(state.windowHours)});
   if(state.refrigeratorId) params.set('refrigerator_id',state.refrigeratorId);
-  try {const data=await getJson(`/api/dashboard?${params}`); if(request!==state.request)return;state.data=data;}
+  try {const data=await getJson(`/api/dashboard?${params}`); if(request!==state.request)return;state.data=data;state.availableRefrigerators=data.selection.available_refrigerators;state.refrigeratorId=data.selection.refrigerator_id;}
   catch(error){if(request!==state.request)return;state.error=error.message;}
   state.busy=false;render();
 }
 async function start() {
-  try {state.scenarios=(await getJson('/api/scenarios')).scenarios;await loadDashboard();}
+  try {await loadDashboard();}
   catch(error){state.error=error.message;state.busy=false;render();}
 }
 start();

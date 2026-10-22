@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from bloodwatch.repository import ScenarioDataError, available_scenarios
+from bloodwatch.repository import DatasetError
 from bloodwatch.service import build_dashboard
 
 
@@ -25,30 +25,19 @@ def health() -> dict[str, str]:
     return {"status": "ok", "service": "bloodwatch-api"}
 
 
-@app.get("/api/scenarios")
-def scenarios() -> dict[str, list[dict]]:
-    return {"scenarios": available_scenarios()}
-
-
 @app.get("/api/dashboard")
 def dashboard(
-    scenario: str = "normal",
-    site_id: str | None = None,
     refrigerator_id: str | None = None,
     temperature_window_hours: float = Query(default=24, gt=0, le=168),
     horizon_operating_days: float = Query(default=30, gt=0, le=365),
 ) -> dict:
     try:
         return build_dashboard(
-            scenario_id=scenario,
-            site_id=site_id,
             refrigerator_id=refrigerator_id,
             temperature_window_hours=temperature_window_hours,
             horizon_operating_days=horizon_operating_days,
         )
-    except FileNotFoundError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
-    except (ScenarioDataError, ValueError) as error:
+    except (DatasetError, ValueError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 

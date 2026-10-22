@@ -1,3 +1,0 @@
-incident_id,refrigerator_id,cause,cooling_loss_utc,observation_end_utc,cooling_restored_utc,blackout_id
-INC-B-MECH-1,R-B1,mechanical,2026-10-20T08:00:00Z,2026-10-20T10:15:00Z,2026-10-20T10:00:00Z,
-INC-B-MECH-2,R-B2,mechanical,2026-09-10T10:00:00Z,2026-09-10T12:00:00Z,2026-09-10T11:00:00Z,
