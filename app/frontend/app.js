@@ -63,6 +63,9 @@ function overview(data) {
   const status=s.state==='within_limits'?'Within range':s.state==='unknown'?'Unknown':'Review required';
   const rows=detailed.map(row=>`<tr><td>${esc(row.incident_id)}</td><td>${row.breach_status==='breached'?minutes(row.observed_hours_to_breach_or_censoring):row.breach_status==='unknown'?'Temperature history missing':'No observed breach before follow-up ended'}</td><td>${minutes(row.recovery_hours)}</td></tr>`).join('');
   const zeroFailures=fridge.failures===0;
+  const normalScenario=data.scenario.id==='normal';
+  const missingBreachValue=normalScenario?'No breach observed':'Insufficient observations';
+  const missingBreachNote=normalScenario?'Normal scenario · no breach time to calculate':'No observed breach time';
   const within=equipment.filter(row=>row.status==='within_limits').length;
   const review=equipment.filter(row=>row.status==='review_required').length;
   const unknown=equipment.filter(row=>row.status==='unknown').length;
@@ -88,8 +91,8 @@ function overview(data) {
   </section>
   <section class="panel">${sectionTitle(2,'Time to breach')}
     <div class="metric-grid two">
-      ${card('Most recent breach',latest?minutes(latest.observed_hours_to_breach_or_censoring):'Not enough data',latest?esc(latest.incident_id):'No observed breach')}
-      ${card('Average to breach',minutes(incident.mean_observed_hours_to_breach_breached_only),`${incident.breached_count} observed breaches`)}
+      ${card('Most recent breach',latest?minutes(latest.observed_hours_to_breach_or_censoring):missingBreachValue,latest?esc(latest.incident_id):missingBreachNote)}
+      ${card('Average to breach',incident.mean_observed_hours_to_breach_breached_only==null?missingBreachValue:minutes(incident.mean_observed_hours_to_breach_breached_only),incident.breached_count?`${incident.breached_count} observed breaches`:missingBreachNote)}
     </div>
     <p class="plain-note">${incident.unbreached_censored_count} without breach · ${incident.unknown_count} missing histories</p>
     <details><summary>See incident times and recovery</summary>${rows?`<div class="table-wrap"><table><thead><tr><th>Incident</th><th>Time to observed breach</th><th>Cooling restored after</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p>No recorded incidents for this refrigerator.</p>'}<p class="plain-note">Restoring cooling and reaching the temperature limit are different events. These data show storage-limit crossings, not a measured time when blood becomes biologically unusable. Missing samples limit what can be inferred between readings.</p></details>
