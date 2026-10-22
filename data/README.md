@@ -1,121 +1,157 @@
-# BloodWatch synthetic-data codebook
+# BloodWatch dataset README and codebook
 
-All files under `data/scenarios/` are reproducible synthetic demonstrations. They contain no patient, donor, or facility data.
+BloodWatch uses reproducible synthetic data. No records describe real patients, donors, blood banks, or equipment.
 
-Regenerate them from the repository root with:
+Each folder in `data/scenarios/` represents one dashboard scenario and contains the same five CSV files plus `metadata.json`. Every scenario has three refrigerators and one shared backup generator.
+
+| Scenario | Current inventory | Purpose |
+|---|---:|---|
+| `normal` | 1,050 bags | Temperatures stay within range and the generator starts successfully |
+| `refrigerator_breakdown` | 1,100 bags | A mechanical cooling failure produces an out-of-range temperature |
+| `blackout_failed_backup` | 1,000 bags | One blackout and one failed generator start affect three refrigerators |
+
+General rules:
+
+- All timestamps are UTC.
+- Blank means unknown or not applicable; numeric zero is an observed zero.
+- `refrigerator_id`, `generator_id`, `incident_id`, and `blackout_id` join related files.
+- One blackout is one generator demand even when it affects several refrigerators.
+- The 1–6 °C range is a storage requirement, not a biological spoilage threshold.
+
+## Overview
+
+### `metadata.json`
+
+Generated scenario context. In real collection, these values would come from study documentation and analysis configuration.
+
+| Variable | Meaning |
+|---|---|
+| `id` | Scenario key |
+| `name` | Display name |
+| `description` | Short scenario summary |
+| `synthetic` | Confirms the data are simulated |
+| `reference_time_utc` | End of the dashboard observation window |
+| `seed` | Random seed used for reproducibility |
+| `generation_assumptions` | Modeling limitations |
+| `planted_truth` | Events intentionally placed in the scenario for verification |
+
+### `inventory_outcomes.csv`
+
+Current blood inventory and historical incident outcomes. Real sources would be the blood inventory, incident-review, and finance systems.
+
+| Variable | Meaning |
+|---|---|
+| `record_type` | `current_snapshot` or `incident_outcome` |
+| `as_of_utc` | Time represented by the row |
+| `incident_id` | Related incident; blank for a current snapshot |
+| `lot_id` | Blood lot identifier used to prevent double counting |
+| `refrigerator_id` | Refrigerator holding the inventory |
+| `bags_present` | Number of bags stored or involved |
+| `value_per_bag_usd` | Demonstration value per bag; blank if unknown |
+| `bags_transferred` | Bags moved after an incident; blank if unknown or not applicable |
+| `bags_written_off` | Bags confirmed written off; blank if unknown or not applicable |
+
+## 1. Temperature
+
+### `temperatures.csv`
+
+Fifteen-minute refrigerator readings. Real data would come from calibrated temperature loggers and the monitoring-quality system.
+
+| Variable | Meaning |
+|---|---|
+| `timestamp_utc` | Reading time |
+| `refrigerator_id` | Refrigerator measured |
+| `temperature_c` | Recorded temperature in °C; blank if missing |
+| `reading_valid` | Whether the reading passed validation |
+
+Invalid or missing readings are never replaced with zero. Readings exactly at 1 °C or 6 °C are within range.
+
+## 2. Cooling loss to out-of-range temperature
+
+### `cooling_incidents.csv`
+
+One row per cooling-loss incident per refrigerator. Real data would combine alarm, maintenance, power-event, and root-cause records.
+
+| Variable | Meaning |
+|---|---|
+| `incident_id` | Unique incident key |
+| `refrigerator_id` | Refrigerator affected |
+| `cause` | `mechanical`, `blackout_failed_start`, or `blackout_interruption` |
+| `cooling_loss_utc` | Time effective cooling stopped |
+| `observation_end_utc` | End of available evidence |
+| `cooling_restored_utc` | Time effective cooling returned; blank if unresolved |
+| `blackout_id` | Related blackout; blank for a mechanical incident |
+
+The dashboard measures from `cooling_loss_utc` to the first valid temperature strictly outside 1–6 °C. This is an observed storage-limit crossing, not a spoilage time.
+
+## 3. Failure risk
+
+### `equipment_exposure.csv`
+
+Refrigerator identity and operating exposure. Real sources would be the asset register, maintenance system, and runtime meter.
+
+| Variable | Meaning |
+|---|---|
+| `equipment_id` | Refrigerator identifier |
+| `site_id` | Site identifier |
+| `equipment_type` | Equipment category; currently `refrigerator` |
+| `model_group` | Refrigerators allowed to share one reliability estimate |
+| `generator_id` | Shared backup generator |
+| `observation_start_utc` | Exposure-period start |
+| `observation_end_utc` | Exposure-period end |
+| `mechanical_operating_hours` | Operating hours used as the mechanical-failure denominator |
+
+### `blackout_demands.csv`
+
+One row per blackout demand on the backup generator. Real sources would be utility, transfer-switch, and generator-controller logs.
+
+| Variable | Meaning |
+|---|---|
+| `blackout_id` | Unique blackout demand |
+| `site_id` | Site affected |
+| `generator_id` | Generator asked to start |
+| `start_utc` | Blackout start |
+| `end_utc` | Blackout end |
+| `auto_start_outcome` | `success`, `failure`, or `unknown` |
+
+Scheduled generator tests are not blackout demands.
+
+## 4. Reliability metrics
+
+These dashboard fields are calculated, not collected as additional variables.
+
+| Metric | Calculation |
+|---|---|
+| Failure rate `λ` | Mechanical failures ÷ mechanical operating hours |
+| Reliability `R(t)` | `exp(−λt)` |
+| Failure probability `F(t)` | `1 − R(t)` |
+| Hazard `h(t)` | `λ` under the constant-rate model |
+| MTBF | `1 ÷ λ`; unavailable when no failures are observed |
+| Generator failed-start rate | Failed starts ÷ blackout demands with known outcomes |
+| Generator uncertainty | 95% Wilson interval for the failed-start rate |
+
+## 5. Process analysis
+
+These fields are calculated from valid rows in `temperatures.csv`. If a visible incident exists, pre-incident readings form the baseline; otherwise the selected window is the exploratory baseline.
+
+| Metric | Meaning |
+|---|---|
+| Mean | Average temperature |
+| Sample SD | Spread of individual readings |
+| Standard error | Sample SD ÷ square root of the reading count |
+| Control limits | Individuals-chart limits estimated from moving ranges |
+| Control signal | Reading outside the estimated control limits |
+| Cp / Cpk | Potential and centered capability using within-process variation |
+| Pp / Ppk | Overall performance using variation across the selected window |
+
+Control limits describe observed process behavior. The 1–6 °C storage limits describe the product requirement.
+
+## Reproduce the datasets
+
+From the repository root:
 
 ```sh
-python3 scripts/generate_scenarios.py
+python3 scripts/project.py data
 ```
 
-## Relationships
-
-- `equipment_exposure.equipment_id` → `temperatures.refrigerator_id`, `cooling_incidents.refrigerator_id`, and `inventory_outcomes.refrigerator_id`.
-- `equipment_exposure.generator_id` → `blackout_demands.generator_id`.
-- `cooling_incidents.incident_id` → `inventory_outcomes.incident_id` for historical outcomes.
-- `cooling_incidents.blackout_id` → `blackout_demands.blackout_id`.
-- One blackout may affect several refrigerators but remains one row and one generator demand.
-
-## Variables
-
-### Equipment and exposure
-
-| Variable | Unit/type | Meaning | Real-world collection source |
-|---|---|---|---|
-| `equipment_id` | text | Refrigerator identifier | Asset-management register |
-| `site_id` | text | Regional location | Asset-management register |
-| `equipment_type` | category | Equipment category | Asset-management register |
-| `model_group` | text | Explicitly comparable equipment pool | Manufacturer/model records plus engineering review |
-| `generator_id` | text | Backup generator mapped to refrigerator | Electrical one-line/asset register |
-| `observation_start_utc` | UTC timestamp | Exposure observation start | Maintenance/reliability system |
-| `observation_end_utc` | UTC timestamp | Exposure observation end | Maintenance/reliability system |
-| `mechanical_operating_hours` | hours | Effective mechanical operation excluding blackout interruption | Runtime meter or defensible operating log |
-
-Zero-failure refrigerators remain in the exposure denominator.
-
-### Temperatures
-
-| Variable | Unit/type | Meaning | Real-world collection source |
-|---|---|---|---|
-| `timestamp_utc` | UTC timestamp | Logged reading time | Calibrated temperature logger |
-| `refrigerator_id` | text | Refrigerator measured | Logger configuration |
-| `temperature_c` | °C or blank | Recorded temperature | Calibrated temperature logger |
-| `reading_valid` | boolean | Whether the reading passed validation | Monitoring/quality system |
-
-Missing temperatures are never filled with zero or interpolated silently.
-
-### Cooling incidents
-
-| Variable | Unit/type | Meaning | Real-world collection source |
-|---|---|---|---|
-| `incident_id` | text | Unique cooling-loss event for one refrigerator | Incident/maintenance log |
-| `refrigerator_id` | text | Affected refrigerator | Incident/maintenance log |
-| `cause` | category | Mechanical failure, failed-start blackout, or brief blackout interruption | Root-cause review |
-| `cooling_loss_utc` | UTC timestamp | Loss of effective cooling | Alarm/power/maintenance log |
-| `observation_end_utc` | UTC timestamp | End of evidence used for breach analysis | Analysis record |
-| `cooling_restored_utc` | UTC timestamp or blank | Restoration of effective cooling | Maintenance log |
-| `blackout_id` | text or blank | Related blackout demand | Power-event log |
-
-Recovery does not imply the temperature had already returned inside limits.
-
-### Blackout demands
-
-| Variable | Unit/type | Meaning | Real-world collection source |
-|---|---|---|---|
-| `blackout_id` | text | One site/generator demand | Power-event log |
-| `site_id` | text | Affected site | Facilities log |
-| `generator_id` | text | Generator demanded | Generator controller/event log |
-| `start_utc` | UTC timestamp | Blackout start | Utility/transfer-switch log |
-| `end_utc` | UTC timestamp | Blackout end | Utility/transfer-switch log |
-| `auto_start_outcome` | category | `success`, `failure`, or `unknown` | Generator controller and incident review |
-
-Scheduled tests are not mixed into the blackout-demand denominator.
-
-### Inventory and outcomes
-
-| Variable | Unit/type | Meaning | Real-world collection source |
-|---|---|---|---|
-| `record_type` | category | Current snapshot or historical incident outcome | Inventory/incident system |
-| `as_of_utc` | UTC timestamp | Time represented | Inventory/incident system |
-| `incident_id` | text or blank | Related historical incident | Incident system |
-| `lot_id` | text | Lot key used for deduplication | Blood inventory system |
-| `refrigerator_id` | text | Storage location | Blood inventory system |
-| `bags_present` | bags | Bags exposed or stored | Blood inventory system |
-| `value_per_bag_usd` | USD/bag or blank | Recorded demonstration value | Finance/inventory system |
-| `bags_transferred` | bags or blank | Recorded transfer outcome | Incident review |
-| `bags_written_off` | bags or blank | Confirmed simulated write-off | Incident/finance review |
-
-Zero is an observed zero outcome. Blank means unknown.
-
-## Scenario truth and planted events
-
-### `normal`
-
-- Temperatures remain within the configured range.
-- Ten blackout demands all have successful automatic starts.
-- A short successful-start interruption is restored before a breach.
-- One older mechanical incident has a recorded zero loss.
-
-### `refrigerator_breakdown`
-
-- Two comparable refrigerators contribute 20,000 mechanical operating hours.
-- Two mechanical failures yield a known rate of `0.0001/hour`.
-- R-B1 warms above 6 °C, recovers, and has a simulated $7,500 write-off.
-- R-B2 provides a completed zero-loss incident.
-
-### `blackout_failed_backup`
-
-- One current blackout affects three refrigerators but creates one generator demand.
-- Historical records contain 2 failed starts in 20 known demands.
-- Two refrigerators breach; one remains within limits before recovery.
-- Inventory is transferred or explicitly written off.
-
-## Generation assumptions
-
-- Fixed seeds make every scenario reproducible.
-- Mechanical event rates are treated as constant within each modeled group.
-- Warming profiles are illustrative and are not validated biological or thermal-physics models.
-- The permitted red-cell demonstration range is configurable; the initial value is 1–6 °C.
-- Failure time of blood means first monitored reading strictly outside the range after cooling loss. It is not shelf life or biological viability.
-
-Generation assumptions and planted truth live in each scenario's `metadata.json`; the analysis does not copy those values as estimates.
+The fixed seeds in `scripts/generate_scenarios.py` recreate the same files.

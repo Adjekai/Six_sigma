@@ -102,7 +102,7 @@ python3 scripts/project.py data
 
 - [Shared interfaces](docs/interfaces.md)
 - [macOS and Windows dependency guide](docs/DEPENDENCIES.md)
-- [Synthetic-data codebook](data/README.md)
+- [Dataset README and codebook](data/README.md)
 - [Team branch handoff](docs/team-plan.md)
 - [Demo walkthrough](demo/README.md)
 - [Earlier project plan and scope-update notice](docs/BLOOD_BANK_PROJECT_PLAN.md)
