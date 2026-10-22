@@ -7,7 +7,7 @@ from .financial import summarize_financials
 from .incidents import summarize_breach_and_recovery
 from .reliability import generator_reliability, refrigerator_reliability
 from .repository import load_scenario
-from .temperature import summarize_temperature
+from .temperature import analyze_temperature_process, summarize_temperature
 
 
 def build_dashboard(
@@ -142,14 +142,16 @@ def build_dashboard(
     )
     all_warnings.extend(financial["warnings"])
 
+    selected_temperature_rows = [
+        row for row in window_temperatures if row["refrigerator_id"] == refrigerator_id
+    ]
     selected_series = [
         {
             "timestamp_utc": row["timestamp"].isoformat(),
             "temperature_c": row["temperature_c"],
             "reading_valid": row["reading_valid"],
         }
-        for row in window_temperatures
-        if row["refrigerator_id"] == refrigerator_id
+        for row in selected_temperature_rows
     ]
     selected_equipment = next(row for row in equipment if row["equipment_id"] == refrigerator_id)
     selected_refrigerator_model = next(
@@ -160,6 +162,15 @@ def build_dashboard(
     )
     selected_incidents = [row for row in incidents if row["refrigerator_id"] == refrigerator_id]
     selected_breach = summarize_breach_and_recovery(selected_incidents, temperatures, lower_limit_c, upper_limit_c)
+    visible_incident_starts = [
+        row["cooling_loss"] for row in selected_incidents if window_start <= row["cooling_loss"] <= reference
+    ]
+    process_analysis = analyze_temperature_process(
+        selected_temperature_rows,
+        lower_limit_c,
+        upper_limit_c,
+        min(visible_incident_starts) if visible_incident_starts else None,
+    )
     metadata = data["metadata"]
     return {
         "scenario": {
@@ -194,6 +205,7 @@ def build_dashboard(
                 else None,
                 "by_refrigerator": inventory_by_refrigerator,
             },
+            "process_analysis": process_analysis,
         },
         "reliability": {
             "refrigerators": refrigerator_results,

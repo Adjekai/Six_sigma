@@ -25,7 +25,7 @@ async function getJson(url) {
   return body;
 }
 
-function lineChart(points, {label, xLabel, yLabel, lower, upper, probability = false, marker = null}) {
+function lineChart(points, {label, xLabel, yLabel, lower, upper, probability = false, marker = null, center = null, limitText = 'limit'}) {
   if (!points.length) return '<p class="empty">No recorded values to plot.</p>';
   const w=850, h=270, l=65, r=25, top=22, bottom=52;
   const valid=points.filter(p=>p.y!=null);
@@ -48,13 +48,15 @@ function lineChart(points, {label, xLabel, yLabel, lower, upper, probability = f
     if(p.y==null) {pen=false; continue;}
     path+=`${pen?'L':'M'}${X(p.x)},${Y(p.y)} `; pen=true;
   }
-  const band=lower==null?'':`<rect class="limit-band" x="${l}" y="${Y(upper)}" width="${w-l-r}" height="${Y(lower)-Y(upper)}"/>${[lower,upper].map(v=>`<line class="storage-line" x1="${l}" x2="${w-r}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${w-r-4}" y="${Y(v)-5}" text-anchor="end">${v} °C limit</text>`).join('')}`;
+  const band=lower==null?'':`<rect class="limit-band" x="${l}" y="${Y(upper)}" width="${w-l-r}" height="${Y(lower)-Y(upper)}"/>${[lower,upper].map(v=>`<line class="storage-line" x1="${l}" x2="${w-r}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${w-r-4}" y="${Y(v)-5}" text-anchor="end">${num(v)} °C ${limitText}</text>`).join('')}`;
+  const centerLine=center==null?'':`<line class="center-line" x1="${l}" x2="${w-r}" y1="${Y(center)}" y2="${Y(center)}"/><text x="${w-r-4}" y="${Y(center)-5}" text-anchor="end">${num(center)} °C center</text>`;
   const event=marker==null||marker<xmin||marker>xmax?'':`<line class="event-line" x1="${X(marker)}" x2="${X(marker)}" y1="${top}" y2="${h-bottom}"/><text x="${Math.min(X(marker)+5,w-150)}" y="${top+12}">Cooling lost</text>`;
-  return `<div class="chart-wrap"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(label)}"><title>${esc(label)}</title>${band}${lines}${event}<path d="${path}" class="temperature-line"/>${valid.length===1?`<circle cx="${X(valid[0].x)}" cy="${Y(valid[0].y)}" r="4" class="point"/>`:''}<text x="15" y="15">${esc(yLabel)}</text><text x="${w/2}" y="${h-4}" text-anchor="middle">${esc(xLabel)}</text></svg></div>`;
+  return `<div class="chart-wrap"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(label)}"><title>${esc(label)}</title>${band}${lines}${centerLine}${event}<path d="${path}" class="temperature-line"/>${valid.length===1?`<circle cx="${X(valid[0].x)}" cy="${Y(valid[0].y)}" r="4" class="point"/>`:''}<text x="15" y="15">${esc(yLabel)}</text><text x="${w/2}" y="${h-4}" text-anchor="middle">${esc(xLabel)}</text></svg></div>`;
 }
 
 function overview(data) {
   const s=data.conditions.temperature_summary;
+  const process=data.conditions.process_analysis;
   const inventory=data.conditions.inventory_summary;
   const equipment=data.conditions.equipment;
   const fridge=data.reliability.selected_refrigerator_model;
@@ -119,10 +121,18 @@ function overview(data) {
       ${card('Generator 95% interval',`${pct(generator.wilson_interval_95.lower)}–${pct(generator.wilson_interval_95.upper)}`,'Failed start probability')}
     </div>
   </section>
-  <details class="panel"><summary>Other class tools: stability, capability, and uncertainty</summary>
-    <dl><div><dt>Mean and standard deviation</dt><dd>The typical temperature and spread of individual readings; shown above.</dd></div><div><dt>Standard error</dt><dd>Uncertainty in an estimated mean. It does not describe individual blood temperatures; s/√n requires an appropriate independence assumption.</dd></div><div><dt>Control charts</dt><dd>Detect changes from a reviewed normal baseline. Common-cause variation is normal process variation; a breakdown is a potential special cause. The chart above is a temperature history with storage limits, not a control chart.</dd></div><div><dt>Cp/Cpk and Pp/Ppk</dt><dd>Compare process spread and centering with 1–6 °C specifications. Cp/Cpk need a defensible within-process estimate and stability; Pp/Ppk summarize overall performance. We do not calculate capability by mixing normal readings and a known breakdown.</dd></div></dl>
-    <p class="plain-note">A next course-focused addition is one baseline control chart, followed by capability once its assumptions are supported. Control limits describe the process; storage limits describe the product requirement.</p>
-  </details>
+  <section class="panel">${sectionTitle(5,'Process analysis')}
+    <div class="metric-grid three">
+      ${card('Standard error',process.standard_error_c==null?'Unavailable':`${num(process.standard_error_c,3)} °C`,'s ÷ √n')}
+      ${card('Control limits',process.lower_control_limit_c==null?'Unavailable':`${num(process.lower_control_limit_c)}–${num(process.upper_control_limit_c)} °C`,`${process.baseline_count} ${process.baseline_source==='pre_incident'?'pre-incident':'window'} readings`)}
+      ${card('Control signals',process.out_of_control_count==null?'Unavailable':num(process.out_of_control_count,0),'Points outside control limits')}
+      ${card('Cp',num(process.cp),'Potential capability')}
+      ${card('Cpk',num(process.cpk),'Centered capability')}
+      ${card('Pp / Ppk',`${num(process.pp)} / ${num(process.ppk)}`,'Overall performance')}
+    </div>
+    ${process.lower_control_limit_c==null?'':lineChart(series,{label:'Individuals control chart',xLabel:'Recorded time (UTC)',yLabel:'Temperature (°C)',lower:process.lower_control_limit_c,upper:process.upper_control_limit_c,center:process.center_line_c,limitText:'control limit',marker:shownIncident?Date.parse(shownIncident.cooling_loss_utc):null})}
+    <p class="plain-note">Control limits: baseline behavior · Storage limits: ${s.lower_limit_c}–${s.upper_limit_c} °C</p>
+  </section>
   <details class="panel"><summary>Financial impact</summary><div class="metric-grid two">${card('Inventory exposed',usd(data.financial.inventory_exposed_usd),'Current scenario')}${card('Recorded loss',usd(data.financial.actual_historical_loss_usd),'Synthetic history')}</div></details>
   ${data.warnings.length?`<details class="warnings"><summary>Data limitations (${data.warnings.length})</summary><ul>${data.warnings.map(w=>`<li>${esc(w.message)}</li>`).join('')}</ul></details>`:''}`;
 }

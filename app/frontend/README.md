@@ -14,7 +14,7 @@ The breach-time section uses only incidents for the selected refrigerator. A fir
 
 The probability section labels refrigerator estimates as pooled model-group results. It shows the refrigerator failure CDF and generator failed starts per known demand, with formulas and uncertainty in expandable explanations. Zero observed failures are not displayed as established zero risk.
 
-Additional class concepts (control limits versus specifications, common/special causes, Cp/Cpk versus Pp/Ppk, SD versus SE) are explained in an expandable section. These do not pretend that a baseline control chart or capability analysis has already been implemented. A reviewed stable baseline is the next step for those calculations.
+Process analysis includes standard error, an individuals control chart, Cp/Cpk, and Pp/Ppk. When an incident starts inside the selected window, pre-incident readings form the baseline; otherwise the selected window is used as an exploratory baseline. Control limits describe observed behavior, while 1–6 °C remains the storage requirement.
 
 Inventory exposure and recorded losses remain expandable and are explicitly scoped to the scenario site. More detailed financial outputs remain in the API.
 

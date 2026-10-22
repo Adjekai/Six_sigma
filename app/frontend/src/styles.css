@@ -90,6 +90,7 @@ details > summary + * { margin-top:16px; }
 .inline-control { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:16px; }
 .inline-control select { font:inherit; padding:8px; border-radius:6px; border:1px solid #bdcdd1; }
 .storage-line { stroke:#1e6d4e; stroke-width:1; stroke-dasharray:5 3; }
+.center-line { stroke:#344f59; stroke-width:1.5; }
 .event-line { stroke:#944318; stroke-width:1.5; stroke-dasharray:4 4; }
 .chart-wrap svg { min-width:580px; }
 dl div { align-items:flex-start; }
