@@ -120,7 +120,7 @@ function overview(data) {
 function render() {
   const data=state.data;
   const fridgeOptions=(data?.selection.available_refrigerators||[]).map(id=>`<option value="${esc(id)}"${id===(state.refrigeratorId||data?.selection.refrigerator_id)?' selected':''}>${esc(refrigeratorName(id))} (${esc(id)})</option>`).join('');
-  root.innerHTML=`<main><header class="masthead"><div><p class="eyebrow">Storage · response · reliability</p><h1>BloodWatch</h1></div><span class="synthetic">SYNTHETIC CLASS DEMO</span></header>
+  root.innerHTML=`<main><header class="masthead"><div><p class="eyebrow">Storage · response · reliability</p><h1>BloodWatch</h1></div></header>
     <section class="controls" aria-label="Dashboard controls"><label>Choose a scenario<select id="scenario" ${state.busy?'disabled':''}>${state.scenarios.map(s=>`<option value="${esc(s.id)}"${s.id===state.scenario?' selected':''}>${esc(s.name)}</option>`).join('')}</select></label><label>Refrigerator<select id="refrigerator" ${state.busy?'disabled':''}>${fridgeOptions}</select></label><label>Temperature history<select id="window" ${state.busy?'disabled':''}>${[6,24].map(v=>`<option value="${v}"${v===state.windowHours?' selected':''}>Last ${v} hours</option>`).join('')}</select></label></section>
     <div aria-live="polite">${state.error?`<p class="error" role="alert">${esc(state.error)}</p>`:state.busy?'<p class="loading">Updating analysis…</p>':data?`<p class="context">${esc(data.scenario.name)} · ${esc(data.scenario.reference_time_utc)}</p>${overview(data)}`:'<p class="loading">Loading dashboard…</p>'}</div>
     <footer>Synthetic educational data. Storage breaches require review.</footer></main>`;
