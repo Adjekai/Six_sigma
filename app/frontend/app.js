@@ -75,7 +75,8 @@ function overview(data) {
   const within=equipment.filter(row=>row.status==='within_limits').length;
   const review=equipment.filter(row=>row.status==='review_required').length;
   const unknown=equipment.filter(row=>row.status==='unknown').length;
-  const inventoryRows=inventory.by_refrigerator.map(row=>`<tr><td><strong>${esc(refrigeratorName(row.refrigerator_id))}</strong><br><small>${esc(refrigeratorCode(row.refrigerator_id))}</small></td><td>${num(row.bags_present,0)}</td><td>${row.lot_count}</td><td>${usd(row.inventory_value_usd)}</td></tr>`).join('');
+  const fullestInventory=Math.max(...inventory.by_refrigerator.map(row=>row.bags_present),1);
+  const inventoryRows=inventory.by_refrigerator.map(row=>`<tr><td><strong>${esc(refrigeratorName(row.refrigerator_id))}</strong><br><small>${esc(refrigeratorCode(row.refrigerator_id))}</small></td><td><div class="blood-level" title="${num(row.bags_present,0)} bags; relative to the fullest refrigerator"><span class="blood-level-fill" style="width:${row.bags_present/fullestInventory*100}%"></span><strong>${num(row.bags_present,0)} bags</strong></div></td><td>${row.lot_count}</td><td>${usd(row.inventory_value_usd)}</td></tr>`).join('');
   return `<section class="panel overview-panel"><h2>Overview</h2>
     <div class="metric-grid four">
       ${card('Inventory',`${num(inventory.bags_present,0)} bags`,`${inventory.lot_count} lots · ${usd(inventory.inventory_value_usd)}`)}
@@ -84,7 +85,7 @@ function overview(data) {
       ${card('Currently viewing',esc(refrigeratorName(data.selection.refrigerator_id)),`ID ${esc(refrigeratorCode(data.selection.refrigerator_id))}`)}
     </div>
     <h3>Inventory by refrigerator</h3>
-    <div class="table-wrap"><table><thead><tr><th>Refrigerator</th><th>Bags</th><th>Lots</th><th>Value</th></tr></thead><tbody>${inventoryRows}</tbody></table></div>
+    <div class="table-wrap"><table><thead><tr><th>Refrigerator</th><th>Relative inventory</th><th>Lots</th><th>Value</th></tr></thead><tbody>${inventoryRows}</tbody></table></div>
   </section>
   <section class="panel">${sectionTitle(1,'Temperature')}
     <div class="metric-grid three">
