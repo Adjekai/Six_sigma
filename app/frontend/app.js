@@ -108,12 +108,16 @@ function overview(data) {
       ${card('Generator start failure',generator.failed_demands===0?'No failed starts observed':pct(generator.failed_start_probability),`${generator.failed_demands} failed · ${generator.known_demands} demands · ${esc(generator.generator_id)}`)}
     </div>
     ${zeroFailures?`<p class="plain-note">95% upper rate: ${num(fridge.rate_interval_95.upper,6)} per hour</p>`:lineChart(fridge.cdf.map(p=>({x:p.operating_hours/24,y:p.failure_probability})),{label:'Probability of a refrigerator mechanical failure by operating time',xLabel:'Future operating time (days)',yLabel:'Failure probability F(t)',probability:true})}
-    <details><summary>Connect this to class: λ, R(t), F(t), hazard, and mean life</summary>
-      <p><strong>Failure rate λ:</strong> ${num(fridge.rate_per_hour,6)} failures/hour = failures ÷ operating hours. The model assumes a constant rate.</p>
-      <p><strong>Reliability:</strong> R(t) = exp(−λt), the probability of no mechanical failure through t operating hours. <strong>Failure CDF:</strong> F(t) = 1 − R(t), the probability of a failure by then.</p>
-      <p><strong>Hazard:</strong> h(t) = λ in this model. <strong>Mean time between equipment failures:</strong> 1/λ = ${num(fridge.mtbf_hours,0)} hours. It describes repairable refrigerators; it is not the blood's time to a temperature breach.</p>
-      <p><strong>Generator:</strong> failed starts ÷ known demands. Its 95% interval is ${pct(generator.wilson_interval_95.lower)}–${pct(generator.wilson_interval_95.upper)}. Zero failed starts in a small sample does not establish perfect reliability.</p>
-    </details>
+  </section>
+  <section class="panel">${sectionTitle(4,'Reliability metrics')}
+    <div class="metric-grid three">
+      ${card('Failure rate λ',`${num(fridge.rate_per_hour,6)} / hour`,'Failures ÷ operating hours')}
+      ${card('Reliability R(t)',pct(fridge.reliability),`No failure through ${state.horizonDays} days`)}
+      ${card('Failure probability F(t)',pct(fridge.failure_probability),`Failure within ${state.horizonDays} days`)}
+      ${card('Hazard h(t)',`${num(fridge.rate_per_hour,6)} / hour`,'Constant-rate model')}
+      ${card('MTBF',fridge.mtbf_hours==null?'Unavailable':`${num(fridge.mtbf_hours,0)} hours`,fridge.mtbf_hours==null?'No mechanical failures observed':'Mean time between failures')}
+      ${card('Generator 95% interval',`${pct(generator.wilson_interval_95.lower)}–${pct(generator.wilson_interval_95.upper)}`,'Failed start probability')}
+    </div>
   </section>
   <details class="panel"><summary>Other class tools: stability, capability, and uncertainty</summary>
     <dl><div><dt>Mean and standard deviation</dt><dd>The typical temperature and spread of individual readings; shown above.</dd></div><div><dt>Standard error</dt><dd>Uncertainty in an estimated mean. It does not describe individual blood temperatures; s/√n requires an appropriate independence assumption.</dd></div><div><dt>Control charts</dt><dd>Detect changes from a reviewed normal baseline. Common-cause variation is normal process variation; a breakdown is a potential special cause. The chart above is a temperature history with storage limits, not a control chart.</dd></div><div><dt>Cp/Cpk and Pp/Ppk</dt><dd>Compare process spread and centering with 1–6 °C specifications. Cp/Cpk need a defensible within-process estimate and stability; Pp/Ppk summarize overall performance. We do not calculate capability by mixing normal readings and a known breakdown.</dd></div></dl>
