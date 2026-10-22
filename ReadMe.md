@@ -1,111 +1,175 @@
 # BloodWatch
 
-BloodWatch is a small Python + FastAPI prototype for regional blood-bank supervisors. Its browser-native dashboard has no Node.js dependency. It separates current storage-condition evidence, equipment reliability estimates, and recorded synthetic financial outcomes so that every displayed number can be explained.
+BloodWatch is a Python and FastAPI dashboard for synthetic blood-storage data.
 
 Team members: Audrey Sakcey, Isabelle Seidenberg, Jasmine Tamous, Ameera El'Amin-White, Jonathan EngleA
 
-> All included data are synthetic. This prototype does not determine biological viability, clinical suitability, or whether blood must be discarded.
+> All records are synthetic. The dashboard describes storage conditions and equipment reliability; it does not determine whether blood is clinically usable.
 
-## What the first pass includes
+## Run the dashboard
 
-The dashboard asks three questions on one page:
+Python 3.12–3.15 is required.
 
-1. **Is the temperature within the storage range?** Latest temperature, mean, minimum/maximum, sample standard deviation, and a time-labeled history with 1–6 °C storage limits.
-2. **How long after cooling fails does temperature leave that range?** Observed incident times for the selected refrigerator, with recovery and missing evidence explained.
-3. **How likely is a failure?** A pooled refrigerator model and its failure CDF, plus the associated generator's failed starts per blackout demand. Equipment failure and temperature breach are explicitly different outcomes.
+| Action | macOS | Windows PowerShell |
+|---|---|---|
+| Install | `python3 scripts/project.py setup` | `py scripts\project.py setup` |
+| Run | `python3 scripts/project.py run` | `py scripts\project.py run` |
+| Test | `python3 scripts/project.py test` | `py scripts\project.py test` |
+| Regenerate data | `python3 scripts/project.py data` | `py scripts\project.py data` |
 
-The page connects these outputs to variation, exponential reliability, failure CDF, constant hazard, mean time between failures, standard error, an individuals control chart, and capability/performance indices. When an incident starts inside the selected window, pre-incident readings form the control baseline; otherwise the selected window is the exploratory baseline.
+Open <http://127.0.0.1:8000>. Press `Ctrl+C` in the same terminal to stop the server.
 
-No biological spoilage time or calibrated probability of temperature breach is inferred from these few synthetic incidents. Zero observed equipment failures are not displayed as proof of zero risk.
+## Overview
 
-Three reproducible scenarios demonstrate normal operation, a mechanical refrigerator breakdown, and a blackout with a failed backup start.
+Each folder under `data/scenarios/` contains five CSV files and `metadata.json`. Every scenario has three refrigerators and one shared backup generator.
 
-## Architecture
+| Scenario | Current inventory | Purpose |
+|---|---:|---|
+| `normal` | 1,050 bags | Temperatures stay within range; all recorded generator starts succeed |
+| `refrigerator_breakdown` | 1,100 bags | A mechanical cooling failure produces an out-of-range temperature |
+| `blackout_failed_backup` | 1,000 bags | One current blackout and failed generator start affect three refrigerators |
 
-```text
-data/scenarios/             generated related CSVs
-scripts/generate_scenarios.py
-                            reproducible data generator
-app/bloodwatch/             plain Python analysis modules
-app/qc.py                   public statistical interface
-app/api.py                  FastAPI routes
-app/frontend/               browser-native HTML/CSS/JavaScript dashboard
-tests/                      statistical, scenario, and API checks
-docs/interfaces.md          shared schema and JSON contract
-```
+Dataset rules:
 
-The frontend does not calculate reliability or financial metrics. It only requests, formats, and plots API results.
+- All timestamps are UTC.
+- Blank means unknown or not applicable; zero is an observed zero.
+- IDs join records across files.
+- One blackout is one generator demand even when it affects three refrigerators.
+- The 1–6 °C range is a storage requirement, not a biological spoilage threshold.
 
-## Local setup
+### `metadata.json`
 
-Requirements:
+Scenario context generated from `scripts/generate_scenarios.py`. In real collection, this would come from study documentation and analysis configuration.
 
-- Python 3.12 through 3.15
-- `make` is optional; the cross-platform helper does not require it
+| Variable | Meaning |
+|---|---|
+| `id` | Scenario key |
+| `name` | Scenario display name |
+| `description` | Scenario summary |
+| `synthetic` | Confirms the records are simulated |
+| `reference_time_utc` | End of the observation window |
+| `seed` | Reproducible random seed |
+| `generation_assumptions` | Modeling limitations |
+| `planted_truth` | Events intentionally included for verification |
 
-Use the cross-platform helper so macOS and Windows teammates follow the same process.
+### `inventory_outcomes.csv`
 
-macOS:
+Current inventory and historical incident outcomes. Real sources would be inventory, incident-review, and finance systems.
 
-```sh
-python3 scripts/project.py setup
-```
+| Variable | Meaning |
+|---|---|
+| `record_type` | `current_snapshot` or `incident_outcome` |
+| `as_of_utc` | Time represented by the row |
+| `incident_id` | Related incident; blank for current inventory |
+| `lot_id` | Blood lot identifier used to prevent double counting |
+| `refrigerator_id` | Refrigerator holding the inventory |
+| `bags_present` | Bags stored or involved |
+| `value_per_bag_usd` | Demonstration value per bag; blank if unknown |
+| `bags_transferred` | Bags moved after an incident; blank if unknown or not applicable |
+| `bags_written_off` | Bags confirmed written off; blank if unknown or not applicable |
 
-Windows PowerShell:
+## 1. Temperature
 
-```powershell
-py scripts\project.py setup
-```
+The dashboard shows the latest temperature, mean, range, sample standard deviation, and selected history for one refrigerator.
 
-## Run
+### `temperatures.csv`
 
-After installation, one command starts FastAPI and serves the dashboard.
+Fifteen-minute readings. Real data would come from calibrated temperature loggers and the monitoring-quality system.
 
-macOS:
+| Variable | Meaning |
+|---|---|
+| `timestamp_utc` | Reading time |
+| `refrigerator_id` | Refrigerator measured |
+| `temperature_c` | Recorded temperature in °C; blank if missing |
+| `reading_valid` | Whether the reading passed validation |
 
-```sh
-python3 scripts/project.py run
-```
+Invalid readings are not replaced with zero. Readings exactly at 1 °C or 6 °C are within range.
 
-Windows PowerShell:
+## 2. Cooling loss to out-of-range temperature
 
-```powershell
-py scripts\project.py run
-```
+The dashboard measures from cooling loss to the first valid reading strictly outside 1–6 °C.
 
-Open <http://127.0.0.1:8000>. API documentation is available at <http://127.0.0.1:8000/docs>.
+### `cooling_incidents.csv`
 
-Press `Ctrl+C` in the same terminal that started BloodWatch to stop the server. This works on macOS and Windows. If port 8000 is already in use, another terminal or application already owns that port; stop that process before starting BloodWatch again.
+One row per cooling-loss incident per refrigerator. Real data would combine alarm, maintenance, power-event, and root-cause records.
 
-## Verify
+| Variable | Meaning |
+|---|---|
+| `incident_id` | Unique incident key |
+| `refrigerator_id` | Refrigerator affected |
+| `cause` | `mechanical`, `blackout_failed_start`, or `blackout_interruption` |
+| `cooling_loss_utc` | Time effective cooling stopped |
+| `observation_end_utc` | End of available evidence |
+| `cooling_restored_utc` | Time effective cooling returned; blank if unresolved |
+| `blackout_id` | Related blackout; blank for a mechanical incident |
 
-```sh
-python3 scripts/project.py test
-```
+The result is an observed storage-limit crossing, not a spoilage time. Cooling restoration and return to the storage range are separate events.
 
-Regenerate the same synthetic datasets with:
+## 3. Failure risk
 
-```sh
-python3 scripts/project.py data
-```
+The dashboard separates refrigerator mechanical failures from backup-generator start failures.
 
-## Important definitions
+### `equipment_exposure.csv`
 
-- **Mechanical failure rate:** observed mechanical failures divided by mechanical operating hours. Blackout interruption is excluded from that exposure.
-- **MTBF:** reciprocal of the estimated constant failure-occurrence rate. It is not a countdown.
-- **Generator failed-start probability:** failed automatic starts divided by blackout demands with known outcomes. Temperature rows and affected refrigerators are not demands.
-- **Time to storage-limit breach:** elapsed time from loss of effective cooling until the first recorded temperature strictly outside the configured range. It is limited by the logging interval.
-- **Actual loss:** recorded synthetic write-offs only. A temperature breach alone does not create a loss.
-- **Inventory exposed:** unique current inventory associated with a cooling interruption, breach, or unknown condition. It is not expected loss.
+Equipment identity and operating exposure. Real sources would be the asset register, maintenance system, and runtime meter.
 
-## Documentation
+| Variable | Meaning |
+|---|---|
+| `equipment_id` | Refrigerator identifier |
+| `site_id` | Site identifier |
+| `equipment_type` | Equipment category; currently `refrigerator` |
+| `model_group` | Refrigerators pooled into one reliability estimate |
+| `generator_id` | Shared backup generator |
+| `observation_start_utc` | Exposure-period start |
+| `observation_end_utc` | Exposure-period end |
+| `mechanical_operating_hours` | Mechanical-failure exposure denominator |
 
-- [Shared interfaces](docs/interfaces.md)
-- [macOS and Windows dependency guide](docs/DEPENDENCIES.md)
-- [Dataset README and codebook](data/README.md)
-- [Team branch handoff](docs/team-plan.md)
-- [Demo walkthrough](demo/README.md)
-- [Earlier project plan and scope-update notice](docs/BLOOD_BANK_PROJECT_PLAN.md)
+### `blackout_demands.csv`
+
+One row per blackout demand on the backup generator. Real sources would be utility, transfer-switch, and generator-controller logs.
+
+| Variable | Meaning |
+|---|---|
+| `blackout_id` | Unique blackout demand |
+| `site_id` | Site affected |
+| `generator_id` | Generator asked to start |
+| `start_utc` | Blackout start |
+| `end_utc` | Blackout end |
+| `auto_start_outcome` | `success`, `failure`, or `unknown` |
+
+Scheduled generator tests are not blackout demands.
+
+## 4. Reliability metrics
+
+These values are calculated from the failure-risk files; they are not additional collected variables.
+
+| Metric | Calculation |
+|---|---|
+| Failure rate `λ` | Mechanical failures ÷ mechanical operating hours |
+| Reliability `R(t)` | `exp(−λt)` |
+| Failure probability `F(t)` | `1 − R(t)` |
+| Hazard `h(t)` | `λ` under the constant-rate model |
+| MTBF | `1 ÷ λ`; unavailable when no failures are observed |
+| Generator failed-start rate | Failed starts ÷ blackout demands with known outcomes |
+| Generator uncertainty | 95% Wilson interval for the failed-start rate |
+
+Zero observed failures do not prove zero future risk.
+
+## 5. Process analysis
+
+These values are calculated from valid rows in `temperatures.csv`. Pre-incident readings form the baseline when an incident appears in the selected window; otherwise the selected window is the exploratory baseline.
+
+| Metric | Meaning |
+|---|---|
+| Mean | Average temperature |
+| Sample SD | Spread of individual readings |
+| Standard error | Sample SD ÷ square root of the reading count |
+| Control limits | Individuals-chart limits estimated from moving ranges |
+| Control signal | Reading outside the estimated control limits |
+| Cp / Cpk | Potential and centered capability using within-process variation |
+| Pp / Ppk | Overall performance using variation across the selected window |
+
+Control limits describe observed behavior. The 1–6 °C limits describe the storage requirement.
 
 ## Sources
 

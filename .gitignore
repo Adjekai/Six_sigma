@@ -9,3 +9,4 @@ __pycache__/
 app/frontend/node_modules/
 app/frontend/dist/
 .DS_Store
+.pyc
