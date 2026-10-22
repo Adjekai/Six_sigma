@@ -40,6 +40,22 @@ def build_dashboard(
     incidents = [row for row in data["incidents"] if row["refrigerator_id"] in equipment_ids]
     blackouts = [row for row in data["blackouts"] if site_id is None or row["site_id"] == site_id]
     inventory = [row for row in data["inventory"] if row["refrigerator_id"] in equipment_ids]
+    current_inventory = [row for row in inventory if row["record_type"] == "current_snapshot"]
+    valued_inventory = [row for row in current_inventory if row["value_per_bag_usd"] is not None]
+    inventory_by_refrigerator = []
+    for equipment_id in sorted(equipment_ids):
+        rows = [row for row in current_inventory if row["refrigerator_id"] == equipment_id]
+        valued_rows = [row for row in rows if row["value_per_bag_usd"] is not None]
+        inventory_by_refrigerator.append(
+            {
+                "refrigerator_id": equipment_id,
+                "bags_present": sum(row["bags_present"] or 0 for row in rows),
+                "lot_count": len({row["lot_id"] for row in rows}),
+                "inventory_value_usd": sum(
+                    (row["bags_present"] or 0) * row["value_per_bag_usd"] for row in valued_rows
+                ),
+            }
+        )
 
     equipment_status = []
     affected_refrigerators: set[str] = set()
@@ -166,6 +182,18 @@ def build_dashboard(
             "temperature_series": selected_series,
             "equipment": equipment_status,
             "inventory_exposed_usd": financial["inventory_exposed_usd"],
+            "inventory_summary": {
+                "bags_present": sum(row["bags_present"] or 0 for row in current_inventory),
+                "lot_count": len({row["lot_id"] for row in current_inventory}),
+                "inventory_value_usd": sum(
+                    (row["bags_present"] or 0) * row["value_per_bag_usd"] for row in valued_inventory
+                ),
+                "unknown_value_lot_count": len(current_inventory) - len(valued_inventory),
+                "as_of_utc": max((row["as_of"] for row in current_inventory), default=None).isoformat()
+                if current_inventory
+                else None,
+                "by_refrigerator": inventory_by_refrigerator,
+            },
         },
         "reliability": {
             "refrigerators": refrigerator_results,

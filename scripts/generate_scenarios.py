@@ -131,7 +131,7 @@ def build_normal() -> dict:
             "blackout_id": "",
         },
     ]
-    inventory = current_snapshots(refrigerator_ids, [(40, 240), (35, 240)])
+    inventory = current_snapshots(refrigerator_ids, [(400, 240), (350, 240)])
     inventory.append(
         {
             "record_type": "incident_outcome",
@@ -184,7 +184,7 @@ def build_breakdown() -> dict:
             "blackout_id": "",
         },
     ]
-    inventory = current_snapshots(refrigerator_ids, [(50, 250), (32, 250)])
+    inventory = current_snapshots(refrigerator_ids, [(500, 250), (320, 250)])
     inventory.extend(
         [
             {
@@ -256,7 +256,7 @@ def build_blackout() -> dict:
         }
         for index, refrigerator_id in enumerate(refrigerator_ids)
     ]
-    inventory = current_snapshots(refrigerator_ids, [(40, 250), (36, 250), (24, 250)])
+    inventory = current_snapshots(refrigerator_ids, [(400, 250), (360, 250), (240, 250)])
     inventory.extend(
         [
             {

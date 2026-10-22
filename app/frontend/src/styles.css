@@ -68,11 +68,14 @@ footer { margin-top: 28px; padding-top: 18px; border-top: 1px solid #cbd7da; col
 /* Course-focused overview: one page, three questions, optional explanations. */
 main { max-width: 1080px; }
 h1 { font-size: clamp(2.2rem, 5vw, 3.2rem); }
-.question { display:flex; gap:14px; align-items:flex-start; margin-bottom:20px; }
+.question { display:flex; gap:14px; align-items:center; margin-bottom:20px; }
 .question-number { flex:0 0 32px; height:32px; display:grid; place-items:center; border-radius:50%; background:#146b65; color:white; font-weight:700; }
-.question h2 { font-size:1.2rem; margin:2px 0 6px; }
-.question p, .plain-note, .context { color:#4a6169; line-height:1.6; }
-.question p { margin:0; }
+.question h2 { font-size:1.2rem; margin:0; }
+.plain-note, .context { color:#4a6169; line-height:1.6; }
+.metric-grid.four { grid-template-columns:repeat(4,minmax(0,1fr)); }
+.overview-panel h2 { margin-bottom:16px; }
+.overview-panel .metric-grid { margin-bottom:0; }
+.overview-panel h3 { margin:22px 0 8px; font-size:.9rem; }
 .metric-grid.three { grid-template-columns:repeat(3,minmax(0,1fr)); }
 .metric-grid.two { grid-template-columns:repeat(2,minmax(0,1fr)); }
 .metric-card { min-height:0; box-shadow:none; }
@@ -94,4 +97,5 @@ dl div { align-items:flex-start; }
 dt { flex:0 0 190px; font-weight:650; color:#25484e; }
 dd { text-align:left; font-weight:400; line-height:1.6; }
 button:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible { outline:3px solid #d39a29; outline-offset:3px; }
-@media(max-width:700px) { .metric-grid.three,.metric-grid.two { grid-template-columns:1fr; } dl div { display:block; } dd { margin-top:7px; } .panel { padding:16px; } }
+@media(max-width:900px) { .metric-grid.four { grid-template-columns:1fr 1fr; } }
+@media(max-width:700px) { .metric-grid.four,.metric-grid.three,.metric-grid.two { grid-template-columns:1fr; } dl div { display:block; } dd { margin-top:7px; } .panel { padding:16px; } }

@@ -208,6 +208,7 @@ Invalid scenarios, IDs, horizons, schemas, or event ordering return HTTP 400/404
 The existing response fields remain available. The overview also uses:
 
 - `conditions.temperature_summary.standard_deviation_c`: sample SD (`ddof=1`) in the selected window; null with fewer than two valid readings. It describes spread, not standard error.
+- `conditions.inventory_summary`: current bag count, lot count, known inventory value, unknown-value lot count, snapshot time, and refrigerator-level breakdown for the selected site scope.
 - `reliability.selected_refrigerator_model`: the pooled model for the selected refrigerator's model group; label its group and equipment count explicitly.
 - `reliability.selected_generator`: the generator mapped to the selected refrigerator.
 - `reliability.selected_breach_recovery`: incident summaries restricted to the selected refrigerator, unlike the existing site-wide `breach_recovery` field.
