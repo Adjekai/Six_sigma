@@ -11,6 +11,10 @@ const refrigeratorName = id => {
   const number = String(id ?? '').match(/(\d+)$/)?.[1];
   return number ? `Refrigerator ${number}` : `Refrigerator ${id}`;
 };
+const refrigeratorCode = id => {
+  const number = String(id ?? '').match(/(\d+)$/)?.[1];
+  return number ? `R${number}` : String(id ?? '');
+};
 const card = (label, value, note) => `<article class="metric-card"><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`;
 const sectionTitle = (n, title) => `<div class="question"><span class="question-number">${n}</span><h2>${title}</h2></div>`;
 
@@ -69,13 +73,13 @@ function overview(data) {
   const within=equipment.filter(row=>row.status==='within_limits').length;
   const review=equipment.filter(row=>row.status==='review_required').length;
   const unknown=equipment.filter(row=>row.status==='unknown').length;
-  const inventoryRows=inventory.by_refrigerator.map(row=>`<tr><td><strong>${esc(refrigeratorName(row.refrigerator_id))}</strong><br><small>${esc(row.refrigerator_id)}</small></td><td>${num(row.bags_present,0)}</td><td>${row.lot_count}</td><td>${usd(row.inventory_value_usd)}</td></tr>`).join('');
+  const inventoryRows=inventory.by_refrigerator.map(row=>`<tr><td><strong>${esc(refrigeratorName(row.refrigerator_id))}</strong><br><small>${esc(refrigeratorCode(row.refrigerator_id))}</small></td><td>${num(row.bags_present,0)}</td><td>${row.lot_count}</td><td>${usd(row.inventory_value_usd)}</td></tr>`).join('');
   return `<section class="panel overview-panel"><h2>Overview</h2>
     <div class="metric-grid four">
       ${card('Inventory',`${num(inventory.bags_present,0)} bags`,`${inventory.lot_count} lots · ${usd(inventory.inventory_value_usd)}`)}
       ${card('Storage range',`${s.lower_limit_c}–${s.upper_limit_c} °C`,'Refrigerated blood')}
       ${card('Refrigerators',`${within} of ${equipment.length} within range`,review||unknown?`${review} need review · ${unknown} unknown`:'All refrigerators')}
-      ${card('Currently viewing',esc(refrigeratorName(data.selection.refrigerator_id)),`ID ${esc(data.selection.refrigerator_id)}`)}
+      ${card('Currently viewing',esc(refrigeratorName(data.selection.refrigerator_id)),`ID ${esc(refrigeratorCode(data.selection.refrigerator_id))}`)}
     </div>
     <h3>Inventory by refrigerator</h3>
     <div class="table-wrap"><table><thead><tr><th>Refrigerator</th><th>Bags</th><th>Lots</th><th>Value</th></tr></thead><tbody>${inventoryRows}</tbody></table></div>
@@ -121,7 +125,7 @@ function overview(data) {
 
 function render() {
   const data=state.data;
-  const fridgeOptions=(data?.selection.available_refrigerators||[]).map(id=>`<option value="${esc(id)}"${id===(state.refrigeratorId||data?.selection.refrigerator_id)?' selected':''}>${esc(refrigeratorName(id))} (${esc(id)})</option>`).join('');
+  const fridgeOptions=(data?.selection.available_refrigerators||[]).map(id=>`<option value="${esc(id)}"${id===(state.refrigeratorId||data?.selection.refrigerator_id)?' selected':''}>${esc(refrigeratorName(id))} (${esc(refrigeratorCode(id))})</option>`).join('');
   root.innerHTML=`<main><header class="masthead"><div><p class="eyebrow">Storage · response · reliability</p><h1>BloodWatch</h1></div></header>
     <section class="controls" aria-label="Dashboard controls"><label>Choose a scenario<select id="scenario" ${state.busy?'disabled':''}>${state.scenarios.map(s=>`<option value="${esc(s.id)}"${s.id===state.scenario?' selected':''}>${esc(s.name)}</option>`).join('')}</select></label><label>Refrigerator<select id="refrigerator" ${state.busy?'disabled':''}>${fridgeOptions}</select></label><label>Temperature history<select id="window" ${state.busy?'disabled':''}>${[6,24].map(v=>`<option value="${v}"${v===state.windowHours?' selected':''}>Last ${v} hours</option>`).join('')}</select></label></section>
     <div aria-live="polite">${state.error?`<p class="error" role="alert">${esc(state.error)}</p>`:state.busy?'<p class="loading">Updating analysis…</p>':data?`<p class="context">Current time: <span id="current-time">${esc(currentTimestamp())}</span></p>${overview(data)}`:'<p class="loading">Loading dashboard…</p>'}</div>
