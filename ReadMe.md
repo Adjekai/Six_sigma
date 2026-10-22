@@ -8,11 +8,15 @@ Team members: Audrey Sakcey, Isabelle Seidenberg, Jasmine Tamous, Ameera El'Amin
 
 ## What the first pass includes
 
-The dashboard has three sections:
+The dashboard asks three questions on one page:
 
-- **Conditions:** latest temperature, freshness, 24-hour chart, configured 1–6 °C demonstration limits, equipment status, and currently exposed inventory.
-- **Reliability:** constant-rate mechanical failure estimates, MTBF, future operating-hour failure probability, failed generator starts per known blackout demand, Wilson interval, observed breach times, and recovery summaries.
-- **Financial impact:** recorded simulated write-offs, currently exposed value, expected annual loss by mechanical and blackout pathways, and loss by cause.
+1. **Is the temperature within the storage range?** Latest temperature, mean, minimum/maximum, sample standard deviation, and a time-labeled history with 1–6 °C storage limits.
+2. **How long after cooling fails does temperature leave that range?** Observed incident times for the selected refrigerator, with recovery and missing evidence explained.
+3. **How likely is a failure?** A pooled refrigerator model and its failure CDF, plus the associated generator's failed starts per blackout demand. Equipment failure and temperature breach are explicitly different outcomes.
+
+The page connects these outputs to the oral-exam topics: variation, exponential reliability, failure CDF, constant hazard, and mean time between failures. Formulas, class explanations, uncertainty, inventory, and losses are expandable. Control charts and capability are explained as the next baseline-dependent addition; the displayed temperature history is not mislabeled as a control chart.
+
+No biological spoilage time or calibrated probability of temperature breach is inferred from these few synthetic incidents. Zero observed equipment failures are not displayed as proof of zero risk.
 
 Three reproducible scenarios demonstrate normal operation, a mechanical refrigerator breakdown, and a blackout with a failed backup start.
 

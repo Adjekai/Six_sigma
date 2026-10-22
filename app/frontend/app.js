@@ -1,226 +1,126 @@
-const root = document.querySelector("#root");
-const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-const number = new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 });
+const root = document.querySelector('#root');
+const state = { scenarios: [], scenario: 'normal', refrigeratorId: '', horizonDays: 30, windowHours: 6, data: null, error: '', busy: false, request: 0 };
+const esc = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+const num = (v, digits = 2) => v == null ? 'Not enough data' : Number(v).toLocaleString('en-US', {maximumFractionDigits: digits});
+const pct = v => v == null ? 'Not enough data' : `${num(v * 100, 1)}%`;
+const usd = v => v == null ? 'Not enough data' : new Intl.NumberFormat('en-US', {style:'currency',currency:'USD',maximumFractionDigits:0}).format(v);
+const minutes = hours => hours == null ? 'Not enough data' : `${num(hours * 60, 0)} min`;
+const clock = time => new Intl.DateTimeFormat('en-US', {timeZone:'UTC',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(time));
+const card = (label, value, note) => `<article class="metric-card"><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`;
+const sectionTitle = (n, question, text) => `<div class="question"><span class="question-number">${n}</span><div><h2>${question}</h2><p>${text}</p></div></div>`;
 
-const state = {
-  scenarios: [],
-  scenario: "normal",
-  refrigeratorId: "",
-  horizonDays: 30,
-  tab: "conditions",
-  data: null,
-  error: "",
-};
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-function formatMoney(value) {
-  return value === null || value === undefined ? "Unavailable" : money.format(value);
-}
-
-function formatPercent(value) {
-  return value === null || value === undefined ? "Unavailable" : `${(value * 100).toFixed(1)}%`;
-}
-
-function formatNumber(value, suffix = "") {
-  return value === null || value === undefined ? "Unavailable" : `${number.format(value)}${suffix}`;
-}
-
-function stateBadge(value) {
-  const safeValue = escapeHtml(value);
-  return `<span class="state state--${safeValue}">${safeValue.replaceAll("_", " ")}</span>`;
-}
-
-function metricCard(label, value, note) {
-  return `<article class="metric-card"><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`;
-}
-
-async function getJson(url, fallbackMessage) {
+async function getJson(url) {
   const response = await fetch(url);
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body.detail || fallbackMessage);
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.detail || 'Could not load analysis.');
+  return body;
+}
+
+function lineChart(points, {label, xLabel, yLabel, lower, upper, probability = false, marker = null}) {
+  if (!points.length) return '<p class="empty">No recorded values to plot.</p>';
+  const w=850, h=270, l=65, r=25, top=22, bottom=52;
+  const valid=points.filter(p=>p.y!=null);
+  if (!valid.length) return '<p class="empty">No valid values to plot.</p>';
+  const xmin=Math.min(...points.map(p=>p.x)), xmax=Math.max(...points.map(p=>p.x));
+  const ys=valid.map(p=>p.y).concat(lower==null?[]:[lower,upper]);
+  const ymin=probability?0:Math.floor(Math.min(...ys)-0.4), ymax=probability?1:Math.ceil(Math.max(...ys)+0.4);
+  const X=v=>l+(v-xmin)/(xmax-xmin||1)*(w-l-r), Y=v=>top+(ymax-v)/(ymax-ymin||1)*(h-top-bottom);
+  let lines='';
+  for(let i=0;i<=4;i++) {
+    const v=ymin+(ymax-ymin)*i/4;
+    lines+=`<line class="grid" x1="${l}" x2="${w-r}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${l-10}" y="${Y(v)+4}" text-anchor="end">${probability?num(v*100,0)+'%':num(v,1)}</text>`;
   }
-  return response.json();
+  for(let i=0;i<=3;i++) {
+    const v=xmin+(xmax-xmin)*i/3;
+    lines+=`<text x="${X(v)}" y="${h-28}" text-anchor="${i===3?'end':i===0?'start':'middle'}">${probability?num(v,1):clock(v)}</text>`;
+  }
+  let path='', pen=false;
+  for(const p of points) {
+    if(p.y==null) {pen=false; continue;}
+    path+=`${pen?'L':'M'}${X(p.x)},${Y(p.y)} `; pen=true;
+  }
+  const band=lower==null?'':`<rect class="limit-band" x="${l}" y="${Y(upper)}" width="${w-l-r}" height="${Y(lower)-Y(upper)}"/>${[lower,upper].map(v=>`<line class="storage-line" x1="${l}" x2="${w-r}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${w-r-4}" y="${Y(v)-5}" text-anchor="end">${v} °C limit</text>`).join('')}`;
+  const event=marker==null||marker<xmin||marker>xmax?'':`<line class="event-line" x1="${X(marker)}" x2="${X(marker)}" y1="${top}" y2="${h-bottom}"/><text x="${Math.min(X(marker)+5,w-150)}" y="${top+12}">Cooling lost</text>`;
+  return `<div class="chart-wrap"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(label)}"><title>${esc(label)}</title>${band}${lines}${event}<path d="${path}" class="temperature-line"/>${valid.length===1?`<circle cx="${X(valid[0].x)}" cy="${Y(valid[0].y)}" r="4" class="point"/>`:''}<text x="15" y="15">${esc(yLabel)}</text><text x="${w/2}" y="${h-4}" text-anchor="middle">${esc(xLabel)}</text></svg></div>`;
 }
 
-function temperatureChart(series, lower = 1, upper = 6) {
-  const valid = series.filter((row) => row.reading_valid && row.temperature_c !== null);
-  if (!valid.length) return '<p class="empty">No valid readings in this window.</p>';
-
-  const width = 820;
-  const height = 260;
-  const inset = 34;
-  const y = (value) => height - inset - ((value - 0) / 8) * (height - inset * 2);
-  const x = (index) => inset + (index / Math.max(valid.length - 1, 1)) * (width - inset * 2);
-  const points = valid.map((row, index) => `${x(index)},${y(row.temperature_c)}`).join(" ");
-  const grid = [0, 2, 4, 6, 8].map((tick) => `
-    <g><line x1="${inset}" x2="${width - inset}" y1="${y(tick)}" y2="${y(tick)}" class="grid" />
-    <text x="2" y="${y(tick) + 4}">${tick} °C</text></g>`).join("");
-  const circles = valid.map((row, index) => {
-    const breached = row.temperature_c < lower || row.temperature_c > upper;
-    return `<circle cx="${x(index)}" cy="${y(row.temperature_c)}" r="3.5" class="point${breached ? " breach" : ""}" />`;
-  }).join("");
-
-  return `<div class="chart-wrap">
-    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Refrigerator temperature with configured storage limits">
-      <rect x="${inset}" y="${y(upper)}" width="${width - 2 * inset}" height="${y(lower) - y(upper)}" class="limit-band" />
-      ${grid}<polyline points="${points}" class="temperature-line" />${circles}
-    </svg>
-    <p class="chart-note">Shaded area: configured 1–6 °C demonstration range. Equality is in range.</p>
-  </div>`;
-}
-
-function conditions(data) {
-  const summary = data.conditions.temperature_summary;
-  const equipment = data.conditions.equipment.map((row) => `<tr>
-    <td><strong>${escapeHtml(row.equipment_id)}</strong><br><small>${escapeHtml(row.site_id)} · ${escapeHtml(row.generator_id)}</small></td>
-    <td>${stateBadge(row.status)}</td><td>${formatNumber(row.latest_temperature_c, " °C")}</td>
-    <td>${escapeHtml(row.incident_status.replaceAll("_", " "))}</td><td>${escapeHtml(row.alert_reasons.join("; "))}</td>
-  </tr>`).join("");
-  return `<section class="metric-grid">
-      ${metricCard("Latest temperature", formatNumber(summary.latest_temperature_c, " °C"), escapeHtml(summary.latest_timestamp_utc || "No valid reading"))}
-      ${metricCard("Current condition", stateBadge(summary.state), `Freshness: ${formatNumber(summary.freshness_minutes, " min")}`)}
-      ${metricCard("Inventory exposed", formatMoney(data.conditions.inventory_exposed_usd), "Current affected unique lots")}
-      ${metricCard("Window readings", summary.valid_count, `${summary.missing_or_invalid_count} missing or invalid`)}
-    </section>
-    <section class="panel"><div class="panel-heading"><div><p class="eyebrow">Selected refrigerator</p><h2>${escapeHtml(data.selection.refrigerator_id)} temperature</h2></div>${stateBadge(summary.state)}</div>
-      ${temperatureChart(data.conditions.temperature_series, summary.lower_limit_c, summary.upper_limit_c)}
-      <p class="explanation">A breach means review is required. It does not automatically mean that blood is spoiled or should be written off.</p>
-    </section>
-    <section class="panel"><div class="panel-heading"><div><p class="eyebrow">Current conditions</p><h2>Equipment</h2></div></div>
-      <div class="table-wrap"><table><thead><tr><th>Equipment</th><th>Status</th><th>Latest</th><th>Incident</th><th>Reason</th></tr></thead><tbody>${equipment}</tbody></table></div>
-    </section>`;
-}
-
-function reliability(data) {
-  const refrigerator = data.reliability.refrigerators[0];
-  const generator = data.reliability.generators[0];
-  const breach = data.reliability.breach_recovery;
-  return `<section class="metric-grid">
-      ${metricCard("Mechanical failure rate", formatNumber(refrigerator.rate_per_hour, " / hour"), `${refrigerator.failures} failures / ${number.format(refrigerator.exposure_hours)} operating hours`)}
-      ${metricCard("MTBF", formatNumber(refrigerator.mtbf_hours, " hours"), "Not a countdown to the next failure")}
-      ${metricCard(`${data.selection.horizon_operating_days}-day operating risk`, formatPercent(refrigerator.failure_probability), `${number.format(refrigerator.horizon_hours)} future operating hours`)}
-      ${metricCard("Generator failed-start risk", formatPercent(generator.failed_start_probability), `${generator.failed_demands} failed / ${generator.known_demands} known demands`)}
-    </section>
-    <section class="two-column">
-      <article class="panel"><p class="eyebrow">Refrigerators · ${escapeHtml(refrigerator.model_group)}</p><h2>Constant-rate occurrence model</h2><dl>
-        <div><dt>95% rate interval</dt><dd>${formatNumber(refrigerator.rate_interval_95.lower)}–${formatNumber(refrigerator.rate_interval_95.upper)} / hour</dd></div>
-        <div><dt>Reliability over horizon</dt><dd>${formatPercent(refrigerator.reliability)}</dd></div><div><dt>Equipment in pool</dt><dd>${refrigerator.equipment_count}</dd></div>
-      </dl><p class="explanation">Assumes a constant occurrence rate and independent mechanical failures. Blackout interruptions are excluded from operating exposure.</p></article>
-      <article class="panel"><p class="eyebrow">Generator · ${escapeHtml(generator.generator_id)}</p><h2>Failure to start on demand</h2><dl>
-        <div><dt>Wilson 95% interval</dt><dd>${formatPercent(generator.wilson_interval_95.lower)}–${formatPercent(generator.wilson_interval_95.upper)}</dd></div>
-        <div><dt>Successful demands</dt><dd>${generator.successful_demands}</dd></div><div><dt>Unknown outcomes</dt><dd>${generator.unknown_demands}</dd></div>
-      </dl><p class="explanation">The denominator is blackout demands, not refrigerator operating hours or temperature rows.</p></article>
-    </section>
-    <section class="panel"><p class="eyebrow">Cooling incidents</p><h2>Breach and recovery</h2><div class="metric-grid metric-grid--inside">
-      ${metricCard("Breached incidents", breach.breached_count, "First observed reading strictly outside limits")}
-      ${metricCard("Unbreached / censored", breach.unbreached_censored_count, "Recovery or observation ended first")}
-      ${metricCard("Mean observed breach time", formatNumber(breach.mean_observed_hours_to_breach_breached_only, " hours"), "Breached incidents only")}
-      ${metricCard("Median recovery time", formatNumber(breach.median_recovery_hours, " hours"), `${breach.unresolved_incident_count} unresolved incidents`)}
-    </div></section>`;
-}
-
-function lossBars(rows) {
-  if (!rows.length) return '<p class="empty">No recorded simulated write-offs.</p>';
-  const maximum = Math.max(...rows.map((row) => row.loss_usd), 1);
-  return `<div class="loss-bars">${rows.map((row) => `<div class="loss-row"><span>${escapeHtml(row.cause)}</span><div><i style="width:${(row.loss_usd / maximum) * 100}%"></i></div><strong>${formatMoney(row.loss_usd)}</strong></div>`).join("")}</div>`;
-}
-
-function financial(data) {
-  const value = data.financial;
-  return `<section class="metric-grid">
-      ${metricCard("Actual historical loss", formatMoney(value.actual_historical_loss_usd), "Recorded synthetic write-offs")}
-      ${metricCard("Inventory exposed now", formatMoney(value.inventory_exposed_usd), "Not a predicted write-off")}
-      ${metricCard("Expected annual mechanical loss", formatMoney(value.expected_annual_mechanical_loss_usd), `${number.format(value.annual_operating_hours_assumption)} assumed operating hours/year`)}
-      ${metricCard("Expected annual blackout loss", formatMoney(value.expected_annual_blackout_loss_usd), "Estimated from demand and outcome histories")}
-    </section><section class="two-column">
-      <article class="panel"><p class="eyebrow">Recorded outcomes</p><h2>Loss by cause</h2>${lossBars(value.loss_by_cause)}</article>
-      <article class="panel"><p class="eyebrow">Blackout estimate factors</p><h2>What creates the annual estimate</h2><dl>
-        <div><dt>Blackouts / site-year</dt><dd>${formatNumber(value.blackouts_per_year)}</dd></div>
-        <div><dt>P(failed start | blackout)</dt><dd>${formatPercent(value.blackout_factors.failed_start_probability)}</dd></div>
-        <div><dt>P(loss | failed start)</dt><dd>${formatPercent(value.blackout_factors.loss_probability_given_failed_start)}</dd></div>
-        <div><dt>Mean loss | positive loss</dt><dd>${formatMoney(value.blackout_factors.mean_loss_given_loss_usd)}</dd></div>
-      </dl></article></section>
-    <p class="explanation">Expected values are planning estimates. Unknown outcomes are excluded and reported as warnings; they are not treated as zero.</p>`;
+function overview(data) {
+  const s=data.conditions.temperature_summary;
+  const fridge=data.reliability.selected_refrigerator_model;
+  const generator=data.reliability.selected_generator;
+  const incident=data.reliability.selected_breach_recovery;
+  const detailed=incident.incidents;
+  const latest=detailed.filter(row=>row.first_breach_utc).sort((a,b)=>a.cooling_loss_utc.localeCompare(b.cooling_loss_utc)).at(-1);
+  const series=data.conditions.temperature_series.map(row=>({x:Date.parse(row.timestamp_utc),y:row.reading_valid?row.temperature_c:null})).sort((a,b)=>a.x-b.x);
+  const shownIncident=detailed.filter(row=>Date.parse(row.cooling_loss_utc)>=series[0]?.x && Date.parse(row.cooling_loss_utc)<=series.at(-1)?.x).at(-1);
+  const status=s.state==='within_limits'?'Latest reading is within range':s.state==='unknown'?'Current condition is unknown':'Latest reading is outside range — review required';
+  const rows=detailed.map(row=>`<tr><td>${esc(row.incident_id)}</td><td>${row.breach_status==='breached'?minutes(row.observed_hours_to_breach_or_censoring):row.breach_status==='unknown'?'Temperature history missing':'No observed breach before follow-up ended'}</td><td>${minutes(row.recovery_hours)}</td></tr>`).join('');
+  const zeroFailures=fridge.failures===0;
+  return `<section class="panel">${sectionTitle(1,'Is the temperature within the storage range?',`Refrigerated red blood cells: ${s.lower_limit_c}–${s.upper_limit_c} °C. These are product storage limits.`)}
+    <div class="metric-grid three">
+      ${card('Latest recorded temperature',s.latest_temperature_c==null?'Unknown':`${num(s.latest_temperature_c)} °C`,`${esc(status)}. ${s.latest_timestamp_utc?clock(s.latest_timestamp_utc)+' UTC':''}`)}
+      ${card('Average in this window',`${num(s.mean_c)} °C`,`Lowest ${num(s.minimum_c)} °C · highest ${num(s.maximum_c)} °C`)}
+      ${card('Temperature variation — SD',s.standard_deviation_c==null?'Not enough data':`${num(s.standard_deviation_c)} °C`,`${s.valid_count} readings · ${s.missing_or_invalid_count} missing/invalid. Spread across this window.`)}
+    </div>
+    ${lineChart(series,{label:'Recorded temperature over time with 1–6 °C storage limits',xLabel:'Recorded time (UTC)',yLabel:'Temperature (°C)',lower:s.lower_limit_c,upper:s.upper_limit_c,marker:shownIncident?Date.parse(shownIncident.cooling_loss_utc):null})}
+    <p class="plain-note">The shaded band is the permitted storage range. A normal reading now does not erase an earlier breach. A refrigerator sensor is a proxy for stored-product conditions.</p>
+    <p class="source"><a href="https://www.law.cornell.edu/cfr/text/21/640.11" target="_blank" rel="noopener">Storage reference: 21 CFR 640.11</a></p>
+  </section>
+  <section class="panel">${sectionTitle(2,'How long after cooling fails does temperature leave that range?','Measure from cooling loss to the first recorded reading outside either storage limit.')}
+    <div class="metric-grid two">
+      ${card('Most recent observed breach',latest?minutes(latest.observed_hours_to_breach_or_censoring):'Not enough data',latest?`Selected refrigerator · ${esc(latest.incident_id)}`:'No observed breach time is available for this refrigerator.')}
+      ${card('Average observed time to breach',minutes(incident.mean_observed_hours_to_breach_breached_only),`${incident.breached_count} breached incident(s) only. This is an observed average, not a safe response deadline.`)}
+    </div>
+    <p class="plain-note">${incident.breached_count} observed breaches · ${incident.unbreached_censored_count} interruptions with no observed breach before follow-up ended · ${incident.unknown_count} with missing temperature evidence. All are synthetic.</p>
+    <details><summary>See incident times and recovery</summary>${rows?`<div class="table-wrap"><table><thead><tr><th>Incident</th><th>Time to observed breach</th><th>Cooling restored after</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p>No recorded incidents for this refrigerator.</p>'}<p class="plain-note">Restoring cooling and reaching the temperature limit are different events. These data show storage-limit crossings, not a measured time when blood becomes biologically unusable. Missing samples limit what can be inferred between readings.</p></details>
+  </section>
+  <section class="panel">${sectionTitle(3,'How likely is a failure?','Keep equipment failure, generator failure, and temperature breach as different events.')}
+    <label class="inline-control" for="horizon">Predict refrigerator failure over <select id="horizon">${[7,30,90].map(days=>`<option value="${days}"${days===state.horizonDays?' selected':''}>${days} operating days</option>`).join('')}</select></label>
+    <div class="metric-grid two">
+      ${card('Refrigerator failure in this period',zeroFailures?'No failures observed':pct(fridge.failure_probability),`${fridge.failures} mechanical failures / ${num(fridge.exposure_hours,0)} operating hours. Model group ${esc(fridge.model_group)}: ${fridge.equipment_count} refrigerators; this is a pooled estimate.`)}
+      ${card('Generator fails on the next blackout',generator.failed_demands===0?'No failed starts observed':pct(generator.failed_start_probability),`${generator.failed_demands} failed starts / ${generator.known_demands} known blackout demands for ${esc(generator.generator_id)}. A demand-based estimate.`)}
+    </div>
+    ${zeroFailures?`<p class="plain-note">No observed mechanical failures does not establish zero risk. The upper 95% rate bound is ${num(fridge.rate_interval_95.upper,6)} per hour; more failure history is needed.</p>`:lineChart(fridge.cdf.map(p=>({x:p.operating_hours/24,y:p.failure_probability})),{label:'Probability of a refrigerator mechanical failure by operating time',xLabel:'Future operating time (days)',yLabel:'Failure probability F(t)',probability:true})}
+    <p class="plain-note"><strong>What about the probability of a temperature breach after cooling loss?</strong> The demo has only ${detailed.length} interruption(s) for this refrigerator, with ${incident.unknown_count} missing temperature histories. It does not establish a dependable future breach probability. Several refrigerators in one blackout share the same event.</p>
+    <details><summary>Connect this to class: λ, R(t), F(t), hazard, and mean life</summary>
+      <p><strong>Failure rate λ:</strong> ${num(fridge.rate_per_hour,6)} failures/hour = failures ÷ operating hours. The model assumes a constant rate.</p>
+      <p><strong>Reliability:</strong> R(t) = exp(−λt), the probability of no mechanical failure through t operating hours. <strong>Failure CDF:</strong> F(t) = 1 − R(t), the probability of a failure by then.</p>
+      <p><strong>Hazard:</strong> h(t) = λ in this model. <strong>Mean time between equipment failures:</strong> 1/λ = ${num(fridge.mtbf_hours,0)} hours. It describes repairable refrigerators; it is not the blood's time to a temperature breach.</p>
+      <p><strong>Generator:</strong> failed starts ÷ known demands. Its 95% interval is ${pct(generator.wilson_interval_95.lower)}–${pct(generator.wilson_interval_95.upper)}. Zero failed starts in a small sample does not establish perfect reliability.</p>
+    </details>
+  </section>
+  <details class="panel"><summary>Other class tools: stability, capability, and uncertainty</summary>
+    <dl><div><dt>Mean and standard deviation</dt><dd>The typical temperature and spread of individual readings; shown above.</dd></div><div><dt>Standard error</dt><dd>Uncertainty in an estimated mean. It does not describe individual blood temperatures; s/√n requires an appropriate independence assumption.</dd></div><div><dt>Control charts</dt><dd>Detect changes from a reviewed normal baseline. Common-cause variation is normal process variation; a breakdown is a potential special cause. The chart above is a temperature history with storage limits, not a control chart.</dd></div><div><dt>Cp/Cpk and Pp/Ppk</dt><dd>Compare process spread and centering with 1–6 °C specifications. Cp/Cpk need a defensible within-process estimate and stability; Pp/Ppk summarize overall performance. We do not calculate capability by mixing normal readings and a known breakdown.</dd></div></dl>
+    <p class="plain-note">A next course-focused addition is one baseline control chart, followed by capability once its assumptions are supported. Control limits describe the process; storage limits describe the product requirement.</p>
+  </details>
+  <details class="panel"><summary>Inventory and recorded financial loss</summary><div class="metric-grid two">${card('Inventory value exposed now',usd(data.financial.inventory_exposed_usd),'All refrigerators at this scenario site; exposure is not a write-off.')}${card('Recorded historical loss',usd(data.financial.actual_historical_loss_usd),'All refrigerators at this scenario site; recorded synthetic write-offs only.')}</div></details>
+  ${data.warnings.length?`<details class="warnings"><summary>Data limitations (${data.warnings.length})</summary><ul>${data.warnings.map(w=>`<li>${esc(w.message)}</li>`).join('')}</ul></details>`:''}`;
 }
 
 function render() {
-  const data = state.data;
-  const scenarioOptions = state.scenarios.map((row) => `<option value="${escapeHtml(row.id)}"${row.id === state.scenario ? " selected" : ""}>${escapeHtml(row.name)}</option>`).join("");
-  const refrigerators = data?.selection.available_refrigerators || [];
-  const selectedRefrigerator = state.refrigeratorId || data?.selection.refrigerator_id || "";
-  const refrigeratorOptions = refrigerators.map((id) => `<option value="${escapeHtml(id)}"${id === selectedRefrigerator ? " selected" : ""}>${escapeHtml(id)}</option>`).join("");
-  const error = state.error ? `<section class="error">${stateBadge("unknown")}<div><strong>Dashboard unavailable</strong><p>${escapeHtml(state.error)}</p></div></section>` : "";
-  const loading = !state.error && !data ? '<p class="loading">Loading dashboard…</p>' : "";
-  let dashboard = "";
-  if (data && !state.error) {
-    const content = state.tab === "conditions" ? conditions(data) : state.tab === "reliability" ? reliability(data) : financial(data);
-    const warnings = data.warnings.length ? `<details class="warnings"><summary>Analysis warnings (${data.warnings.length})</summary><ul>${data.warnings.map((item) => `<li><strong>${escapeHtml(item.code)}</strong>: ${escapeHtml(item.message)}</li>`).join("")}</ul></details>` : "";
-    dashboard = `<section class="scenario-banner"><div><strong>${escapeHtml(data.scenario.name)}</strong><p>${escapeHtml(data.scenario.description)}</p></div><small>Reference time: ${escapeHtml(data.scenario.reference_time_utc)}</small></section>
-      <nav class="tabs" aria-label="Dashboard sections">${[["conditions", "Conditions"], ["reliability", "Reliability"], ["financial", "Financial impact"]].map(([id, label]) => `<button data-tab="${id}" class="${state.tab === id ? "active" : ""}">${label}</button>`).join("")}</nav>
-      ${content}${warnings}`;
-  }
-
-  root.innerHTML = `<main><header class="masthead"><div><p class="eyebrow">Regional blood-bank operations</p><h1>BloodWatch</h1><p>Supply conditions, equipment reliability, and recorded synthetic losses.</p></div><span class="synthetic">SYNTHETIC DATA</span></header>
-    <section class="controls" aria-label="Dashboard controls">
-      <label>Scenario<select id="scenario">${scenarioOptions}</select></label>
-      <label>Refrigerator<select id="refrigerator">${refrigeratorOptions}</select></label>
-      <label>Operating horizon<select id="horizon">${[7, 30, 90].map((days) => `<option value="${days}"${days === state.horizonDays ? " selected" : ""}>${days} days</option>`).join("")}</select></label>
-    </section>${error}${loading}${dashboard}
-    <footer>Prototype decision support only. A temperature breach requires review and does not automatically establish biological viability, spoilage, or financial write-off.</footer></main>`;
-
-  document.querySelector("#scenario").addEventListener("change", (event) => {
-    state.scenario = event.target.value;
-    state.refrigeratorId = "";
-    loadDashboard();
-  });
-  document.querySelector("#refrigerator").addEventListener("change", (event) => {
-    state.refrigeratorId = event.target.value;
-    loadDashboard();
-  });
-  document.querySelector("#horizon").addEventListener("change", (event) => {
-    state.horizonDays = Number(event.target.value);
-    loadDashboard();
-  });
-  document.querySelectorAll("[data-tab]").forEach((button) => button.addEventListener("click", () => {
-    state.tab = button.dataset.tab;
-    render();
-  }));
+  const data=state.data;
+  const fridgeOptions=(data?.selection.available_refrigerators||[]).map(id=>`<option value="${esc(id)}"${id===(state.refrigeratorId||data?.selection.refrigerator_id)?' selected':''}>${esc(id)}</option>`).join('');
+  root.innerHTML=`<main><header class="masthead"><div><p class="eyebrow">Storage conditions · response time · reliability</p><h1>BloodWatch</h1><p>Three questions, explained with the statistics from class.</p></div><span class="synthetic">SYNTHETIC CLASS DEMO</span></header>
+    <section class="controls" aria-label="Dashboard controls"><label>Choose a scenario<select id="scenario" ${state.busy?'disabled':''}>${state.scenarios.map(s=>`<option value="${esc(s.id)}"${s.id===state.scenario?' selected':''}>${esc(s.name)}</option>`).join('')}</select></label><label>Refrigerator<select id="refrigerator" ${state.busy?'disabled':''}>${fridgeOptions}</select></label><label>Temperature history<select id="window" ${state.busy?'disabled':''}>${[6,24].map(v=>`<option value="${v}"${v===state.windowHours?' selected':''}>Last ${v} hours</option>`).join('')}</select></label></section>
+    <div aria-live="polite">${state.error?`<p class="error" role="alert">${esc(state.error)}</p>`:state.busy?'<p class="loading">Updating analysis…</p>':data?`<p class="context">${esc(data.scenario.description)} Reference time: ${esc(data.scenario.reference_time_utc)}.</p>${overview(data)}`:'<p class="loading">Loading dashboard…</p>'}</div>
+    <footer>Educational demonstration. A storage-limit breach requires product review; it does not establish biological spoilage or automatically require a financial write-off.</footer></main>`;
+  root.querySelector('#scenario').addEventListener('change',e=>{state.scenario=e.target.value;state.refrigeratorId='';loadDashboard();});
+  root.querySelector('#refrigerator').addEventListener('change',e=>{state.refrigeratorId=e.target.value;loadDashboard();});
+  root.querySelector('#window').addEventListener('change',e=>{state.windowHours=Number(e.target.value);loadDashboard();});
+  root.querySelector('#horizon')?.addEventListener('change',e=>{state.horizonDays=Number(e.target.value);loadDashboard();});
 }
 
 async function loadDashboard() {
-  state.error = "";
-  render();
-  const parameters = new URLSearchParams({
-    scenario: state.scenario,
-    horizon_operating_days: String(state.horizonDays),
-    temperature_window_hours: "24",
-  });
-  if (state.refrigeratorId) parameters.set("refrigerator_id", state.refrigeratorId);
-  try {
-    state.data = await getJson(`/api/dashboard?${parameters}`, "Could not load dashboard data");
-  } catch (error) {
-    state.error = error.message;
-  }
-  render();
+  const request=++state.request;
+  state.busy=true; state.error=''; render();
+  const params=new URLSearchParams({scenario:state.scenario,horizon_operating_days:String(state.horizonDays),temperature_window_hours:String(state.windowHours)});
+  if(state.refrigeratorId) params.set('refrigerator_id',state.refrigeratorId);
+  try {const data=await getJson(`/api/dashboard?${params}`); if(request!==state.request)return;state.data=data;}
+  catch(error){if(request!==state.request)return;state.error=error.message;}
+  state.busy=false;render();
 }
-
 async function start() {
-  try {
-    const result = await getJson("/api/scenarios", "Could not load scenarios");
-    state.scenarios = result.scenarios;
-  } catch (error) {
-    state.error = error.message;
-  }
-  await loadDashboard();
+  try {state.scenarios=(await getJson('/api/scenarios')).scenarios;await loadDashboard();}
+  catch(error){state.error=error.message;state.busy=false;render();}
 }
-
 start();

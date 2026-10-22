@@ -203,3 +203,14 @@ Response shape:
 ```
 
 Invalid scenarios, IDs, horizons, schemas, or event ordering return HTTP 400/404 with an understandable `detail` message. The frontend formats API values but performs no statistical calculations.
+# Course-focused overview additions
+
+The existing response fields remain available. The overview also uses:
+
+- `conditions.temperature_summary.standard_deviation_c`: sample SD (`ddof=1`) in the selected window; null with fewer than two valid readings. It describes spread, not standard error.
+- `reliability.selected_refrigerator_model`: the pooled model for the selected refrigerator's model group; label its group and equipment count explicitly.
+- `reliability.selected_generator`: the generator mapped to the selected refrigerator.
+- `reliability.selected_breach_recovery`: incident summaries restricted to the selected refrigerator, unlike the existing site-wide `breach_recovery` field.
+- Each incident includes `cooling_loss_utc`, `first_breach_utc` (nullable), and `cooling_restored_utc` (nullable), used for labels and event markers.
+
+Times to first observed breach are sample-limited storage-condition observations. They are not biological viability times. The overview does not infer a future temperature-breach probability from the small selected incident sample.

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from statistics import mean
+from statistics import mean, stdev
 from typing import Any
 
 from .common import warning
@@ -24,6 +24,7 @@ def summarize_temperature(
         "minimum_c": None,
         "maximum_c": None,
         "mean_c": None,
+        "standard_deviation_c": None,
         "valid_count": len(valid),
         "missing_or_invalid_count": len(rows) - len(valid),
         "state": "unknown",
@@ -47,6 +48,7 @@ def summarize_temperature(
             "minimum_c": min(values),
             "maximum_c": max(values),
             "mean_c": mean(values),
+            "standard_deviation_c": stdev(values) if len(values) > 1 else None,
         }
     )
     if freshness > stale_after_minutes:

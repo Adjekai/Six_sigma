@@ -65,3 +65,33 @@ dd { margin: 0; font-weight: 750; text-align: right; }
 footer { margin-top: 28px; padding-top: 18px; border-top: 1px solid #cbd7da; color: #64777d; font-size: .8rem; }
 @media (max-width: 900px) { .metric-grid { grid-template-columns: 1fr 1fr; } .two-column { grid-template-columns: 1fr; } }
 @media (max-width: 640px) { main { width: min(100% - 20px, 1320px); } .masthead, .scenario-banner { align-items: start; flex-direction: column; } .controls { align-items: stretch; flex-direction: column; } .controls select { width: 100%; } .metric-grid { grid-template-columns: 1fr; } .tabs { overflow-x: auto; } }
+/* Course-focused overview: one page, three questions, optional explanations. */
+main { max-width: 1080px; }
+h1 { font-size: clamp(2.2rem, 5vw, 3.2rem); }
+.question { display:flex; gap:14px; align-items:flex-start; margin-bottom:20px; }
+.question-number { flex:0 0 32px; height:32px; display:grid; place-items:center; border-radius:50%; background:#146b65; color:white; font-weight:700; }
+.question h2 { font-size:1.2rem; margin:2px 0 6px; }
+.question p, .plain-note, .context { color:#4a6169; line-height:1.6; }
+.question p { margin:0; }
+.metric-grid.three { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.metric-grid.two { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.metric-card { min-height:0; box-shadow:none; }
+.metric-card strong { font-size:1.5rem; }
+.metric-card small { line-height:1.5; }
+.plain-note { font-size:.9rem; margin:12px 0; }
+.source { font-size:.8rem; margin:12px 0 0; }
+a { color:#0d625d; }
+details { margin-top:15px; }
+summary { cursor:pointer; font-weight:650; line-height:1.5; }
+details p { line-height:1.6; }
+details > summary + * { margin-top:16px; }
+.inline-control { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:16px; }
+.inline-control select { font:inherit; padding:8px; border-radius:6px; border:1px solid #bdcdd1; }
+.storage-line { stroke:#1e6d4e; stroke-width:1; stroke-dasharray:5 3; }
+.event-line { stroke:#944318; stroke-width:1.5; stroke-dasharray:4 4; }
+.chart-wrap svg { min-width:580px; }
+dl div { align-items:flex-start; }
+dt { flex:0 0 190px; font-weight:650; color:#25484e; }
+dd { text-align:left; font-weight:400; line-height:1.6; }
+button:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible { outline:3px solid #d39a29; outline-offset:3px; }
+@media(max-width:700px) { .metric-grid.three,.metric-grid.two { grid-template-columns:1fr; } dl div { display:block; } dd { margin-top:7px; } .panel { padding:16px; } }

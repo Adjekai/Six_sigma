@@ -1,73 +1,27 @@
-# BloodWatch Dashboard
+# BloodWatch: three questions from class
 
-BloodWatch helps a blood-bank supervisor review refrigerator conditions, equipment failures, and synthetic inventory losses.
+The one-page overview shows synthetic data and asks:
 
-All displayed data are **synthetic demonstration data**. The dashboard does not decide whether blood is safe or should be discarded.
+1. Is the temperature within the refrigerated-red-cell storage range (1–6 °C)?
+2. How long after cooling loss was the first storage-limit breach observed?
+3. How likely is an equipment failure over the selected future operating time, and how often has the generator failed on a blackout demand?
 
-## Dashboard controls
+Choose a scenario, refrigerator, and 6- or 24-hour temperature window. The operating-horizon control belongs to the refrigerator probability section. Temperature plots use real UTC timestamps, label the axes/limits, and mark cooling loss when the incident lies in the displayed window. Missing readings break the plotted line.
 
-- **Scenario:** switches between normal operation, a refrigerator breakdown, and a blackout with a failed generator start.
-- **Refrigerator:** selects the refrigerator shown in the temperature chart.
-- **Operating horizon:** selects how far ahead to estimate refrigerator failure probability.
+Temperature statistics include mean, min/max, and sample SD. The spread reflects the full chosen window, including a breakdown if present. It is not a standard error or stable-baseline capability estimate.
 
-## Conditions
+The breach-time section uses only incidents for the selected refrigerator. A first crossing in the demo is not a biological spoilage threshold or a safe response deadline. Missing histories and incidents with no observed breach remain visible. Repeated refrigerators within one blackout do not establish independent future breach trials.
 
-This section shows what is happening with the equipment and inventory.
+The probability section labels refrigerator estimates as pooled model-group results. It shows the refrigerator failure CDF and generator failed starts per known demand, with formulas and uncertainty in expandable explanations. Zero observed failures are not displayed as established zero risk.
 
-- Latest refrigerator temperature and timestamp.
-- Whether the reading is within the configured 1–6 °C demonstration range.
-- A 24-hour temperature chart.
-- Missing or stale readings.
-- Active cooling incidents.
-- Current inventory value exposed to an interruption or unknown condition.
+Additional class concepts (control limits versus specifications, common/special causes, Cp/Cpk versus Pp/Ppk, SD versus SE) are explained in an expandable section. These do not pretend that a baseline control chart or capability analysis has already been implemented. A reviewed stable baseline is the next step for those calculations.
 
-A temperature outside the limits means **review required**. It does not automatically mean that blood is spoiled.
+Inventory exposure and recorded losses remain expandable and are explicitly scoped to the scenario site. More detailed financial outputs remain in the API.
 
-## Reliability
-
-This section shows estimates based on recorded synthetic event histories.
-
-- Refrigerator mechanical failures and total operating hours.
-- Estimated mechanical failure rate.
-- Mean time between failures, or MTBF.
-- Failure probability over the selected future operating horizon.
-- Generator failed starts divided by known blackout demands.
-- A 95% confidence interval for generator start-failure probability.
-- Observed time to a temperature breach and cooling-recovery time.
-
-MTBF is a long-run average, not a countdown to the next failure.
-
-## Financial Impact
-
-This section separates different kinds of financial information.
-
-- **Actual historical loss:** recorded synthetic write-offs.
-- **Inventory exposed:** current inventory affected by an interruption, breach, or unknown condition.
-- **Expected annual mechanical loss:** planning estimate based on mechanical failure history.
-- **Expected annual blackout loss:** planning estimate based on blackout frequency, failed starts, and recorded losses.
-- **Loss by cause:** recorded losses separated into mechanical and blackout pathways.
-
-Inventory exposed is not the same as inventory lost.
-
-## Status labels
-
-- **Within limits:** the latest valid reading is inside the configured range.
-- **Review required:** an observed condition requires attention.
-- **Unknown:** the available data are missing, stale, or insufficient.
-- **Unavailable:** the requested statistic cannot be estimated from the available history.
-
-## Analysis warnings
-
-The warnings section explains limitations such as missing readings, incomplete outcomes, zero observed failures, or insufficient history. Unknown values are not silently replaced with zero.
-
-## Start the dashboard
-
-From the repository root, after setup:
+Run from the repository root after setup:
 
 ```sh
 python3 scripts/project.py run
 ```
 
-On Windows PowerShell, use `py scripts\project.py run`.
-
-Open <http://127.0.0.1:8000>.
+Open http://127.0.0.1:8000. FastAPI serves the frontend and `/api/dashboard`; all statistical computations remain in Python.

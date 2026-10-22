@@ -135,6 +135,15 @@ def build_dashboard(
         for row in window_temperatures
         if row["refrigerator_id"] == refrigerator_id
     ]
+    selected_equipment = next(row for row in equipment if row["equipment_id"] == refrigerator_id)
+    selected_refrigerator_model = next(
+        row for row in refrigerator_results if row["model_group"] == selected_equipment["model_group"]
+    )
+    selected_generator_model = next(
+        row for row in generator_results if row["generator_id"] == selected_equipment["generator_id"]
+    )
+    selected_incidents = [row for row in incidents if row["refrigerator_id"] == refrigerator_id]
+    selected_breach = summarize_breach_and_recovery(selected_incidents, temperatures, lower_limit_c, upper_limit_c)
     metadata = data["metadata"]
     return {
         "scenario": {
@@ -162,6 +171,9 @@ def build_dashboard(
             "refrigerators": refrigerator_results,
             "generators": generator_results,
             "breach_recovery": breach_recovery,
+            "selected_refrigerator_model": selected_refrigerator_model,
+            "selected_generator": selected_generator_model,
+            "selected_breach_recovery": selected_breach,
         },
         "financial": financial,
         "warnings": all_warnings,
