@@ -34,4 +34,4 @@ def test_breach_time_is_observed_storage_crossing_not_blood_viability():
     assert record['cooling_loss_utc'] == '2026-10-20T08:00:00+00:00'
     assert record['first_breach_utc'] == '2026-10-20T09:15:00+00:00'
     assert record['cooling_restored_utc'] == '2026-10-20T10:00:00+00:00'
-    assert result['reliability']['selected_refrigerator_model']['equipment_count'] == 2
+    assert result['reliability']['selected_refrigerator_model']['equipment_count'] == 3

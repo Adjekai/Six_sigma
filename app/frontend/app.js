@@ -67,21 +67,22 @@ function overview(data) {
   const series=data.conditions.temperature_series.map(row=>({x:Date.parse(row.timestamp_utc),y:row.reading_valid?row.temperature_c:null})).sort((a,b)=>a.x-b.x);
   const shownIncident=detailed.filter(row=>Date.parse(row.cooling_loss_utc)>=series[0]?.x && Date.parse(row.cooling_loss_utc)<=series.at(-1)?.x).at(-1);
   const status=s.state==='within_limits'?'Within range':s.state==='unknown'?'Unknown':'Review required';
-  const rows=detailed.map(row=>`<tr><td>${esc(row.incident_id)}</td><td>${row.breach_status==='breached'?minutes(row.observed_hours_to_breach_or_censoring):row.breach_status==='unknown'?'Temperature history missing':'No observed breach before follow-up ended'}</td><td>${minutes(row.recovery_hours)}</td></tr>`).join('');
+  const rows=detailed.map(row=>`<tr><td>${esc(row.incident_id)}</td><td>${row.breach_status==='breached'?minutes(row.observed_hours_to_breach_or_censoring):row.breach_status==='unknown'?'Temperature history missing':'Stayed within range until follow-up ended'}</td><td>${minutes(row.recovery_hours)}</td></tr>`).join('');
   const zeroFailures=fridge.failures===0;
   const normalScenario=data.scenario.id==='normal';
-  const missingBreachValue=normalScenario?'No breach observed':'Insufficient observations';
-  const missingBreachNote=normalScenario?'Normal scenario · no breach time to calculate':'No observed breach time';
+  const missingBreachValue=normalScenario?'No out-of-range reading':'Insufficient observations';
+  const missingBreachNote=normalScenario?'Normal scenario · no time to calculate':'No out-of-range time observed';
   const within=equipment.filter(row=>row.status==='within_limits').length;
   const review=equipment.filter(row=>row.status==='review_required').length;
   const unknown=equipment.filter(row=>row.status==='unknown').length;
   const fullestInventory=Math.max(...inventory.by_refrigerator.map(row=>row.bags_present),1);
   const inventoryRows=inventory.by_refrigerator.map(row=>`<tr><td><strong>${esc(refrigeratorName(row.refrigerator_id))}</strong><br><small>${esc(refrigeratorCode(row.refrigerator_id))}</small></td><td><div class="blood-level" title="${num(row.bags_present,0)} bags; relative to the fullest refrigerator"><span class="blood-level-fill" style="width:${row.bags_present/fullestInventory*100}%"></span><strong>${num(row.bags_present,0)} bags</strong></div></td><td>${row.lot_count}</td><td>${usd(row.inventory_value_usd)}</td></tr>`).join('');
   return `<section class="panel overview-panel"><h2>Overview</h2>
-    <div class="metric-grid four">
+    <div class="metric-grid five">
       ${card('Inventory',`${num(inventory.bags_present,0)} bags`,`${inventory.lot_count} lots · ${usd(inventory.inventory_value_usd)}`)}
       ${card('Storage range',`${s.lower_limit_c}–${s.upper_limit_c} °C`,'Refrigerated blood')}
       ${card('Refrigerators',`${within} of ${equipment.length} within range`,review||unknown?`${review} need review · ${unknown} unknown`:'All refrigerators')}
+      ${card('Backup power',`${data.reliability.generators.length} backup generator`,`Supports all ${equipment.length} refrigerators`)}
       ${card('Currently viewing',esc(refrigeratorName(data.selection.refrigerator_id)),`ID ${esc(refrigeratorCode(data.selection.refrigerator_id))}`)}
     </div>
     <h3>Inventory by refrigerator</h3>
@@ -96,19 +97,20 @@ function overview(data) {
     ${lineChart(series,{label:'Recorded temperature over time with 1–6 °C storage limits',xLabel:'Recorded time (UTC)',yLabel:'Temperature (°C)',lower:s.lower_limit_c,upper:s.upper_limit_c,marker:shownIncident?Date.parse(shownIncident.cooling_loss_utc):null})}
     <p class="source"><a href="https://www.law.cornell.edu/cfr/text/21/640.11" target="_blank" rel="noopener">1–6 °C storage reference</a></p>
   </section>
-  <section class="panel">${sectionTitle(2,'Time to breach')}
+  <section class="panel">${sectionTitle(2,'Cooling loss to out-of-range temperature')}
+    <div class="breach-definition"><span>Cooling fails</span><strong aria-hidden="true">→</strong><span>First reading outside 1–6 °C</span></div>
     <div class="metric-grid two">
-      ${card('Most recent breach',latest?minutes(latest.observed_hours_to_breach_or_censoring):missingBreachValue,latest?esc(latest.incident_id):missingBreachNote)}
-      ${card('Average to breach',incident.mean_observed_hours_to_breach_breached_only==null?missingBreachValue:minutes(incident.mean_observed_hours_to_breach_breached_only),incident.breached_count?`${incident.breached_count} observed breaches`:missingBreachNote)}
+      ${card('Most recent time',latest?minutes(latest.observed_hours_to_breach_or_censoring):missingBreachValue,latest?esc(latest.incident_id):missingBreachNote)}
+      ${card('Average time',incident.mean_observed_hours_to_breach_breached_only==null?missingBreachValue:minutes(incident.mean_observed_hours_to_breach_breached_only),incident.breached_count?`${incident.breached_count} out-of-range incidents`:missingBreachNote)}
     </div>
-    <p class="plain-note">${incident.unbreached_censored_count} without breach · ${incident.unknown_count} missing histories</p>
-    <details><summary>See incident times and recovery</summary>${rows?`<div class="table-wrap"><table><thead><tr><th>Incident</th><th>Time to observed breach</th><th>Cooling restored after</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p>No recorded incidents for this refrigerator.</p>'}<p class="plain-note">Restoring cooling and reaching the temperature limit are different events. These data show storage-limit crossings, not a measured time when blood becomes biologically unusable. Missing samples limit what can be inferred between readings.</p></details>
+    <p class="plain-note">${incident.unbreached_censored_count} stayed within range · ${incident.unknown_count} missing histories</p>
+    <details><summary>See incident times and recovery</summary>${rows?`<div class="table-wrap"><table><thead><tr><th>Incident</th><th>Cooling loss to first out-of-range reading</th><th>Cooling restored after</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p>No recorded incidents for this refrigerator.</p>'}<p class="plain-note">Restoring cooling and reaching the temperature limit are different events. These data show storage-limit crossings, not a measured time when blood becomes biologically unusable. Missing samples limit what can be inferred between readings.</p></details>
   </section>
   <section class="panel">${sectionTitle(3,'Failure risk')}
     <label class="inline-control" for="horizon">Operating period <select id="horizon">${[7,30,90].map(days=>`<option value="${days}"${days===state.horizonDays?' selected':''}>${days} days</option>`).join('')}</select></label>
     <div class="metric-grid two">
       ${card('Refrigerator failure',zeroFailures?'No failures observed':pct(fridge.failure_probability),`${fridge.failures} failures · ${num(fridge.exposure_hours,0)} hours · ${esc(fridge.model_group)}`)}
-      ${card('Generator start failure',generator.failed_demands===0?'No failed starts observed':pct(generator.failed_start_probability),`${generator.failed_demands} failed · ${generator.known_demands} demands · ${esc(generator.generator_id)}`)}
+      ${card('Backup generator failures',`${generator.failed_demands} of ${generator.known_demands}`,generator.failed_demands===0?'No failed starts during blackouts':`${pct(generator.failed_start_probability)} of blackout starts failed`)}
     </div>
     ${zeroFailures?`<p class="plain-note">95% upper rate: ${num(fridge.rate_interval_95.upper,6)} per hour</p>`:lineChart(fridge.cdf.map(p=>({x:p.operating_hours/24,y:p.failure_probability})),{label:'Probability of a refrigerator mechanical failure by operating time',xLabel:'Future operating time (days)',yLabel:'Failure probability F(t)',probability:true})}
   </section>
@@ -119,7 +121,7 @@ function overview(data) {
       ${card('Failure probability F(t)',pct(fridge.failure_probability),`Failure within ${state.horizonDays} days`)}
       ${card('Hazard h(t)',`${num(fridge.rate_per_hour,6)} / hour`,'Constant-rate model')}
       ${card('MTBF',fridge.mtbf_hours==null?'Unavailable':`${num(fridge.mtbf_hours,0)} hours`,fridge.mtbf_hours==null?'No mechanical failures observed':'Mean time between failures')}
-      ${card('Generator 95% interval',`${pct(generator.wilson_interval_95.lower)}–${pct(generator.wilson_interval_95.upper)}`,'Failed start probability')}
+      ${card('Backup generator uncertainty',`${pct(generator.wilson_interval_95.lower)}–${pct(generator.wilson_interval_95.upper)}`,'95% failed-start interval')}
     </div>
   </section>
   <section class="panel">${sectionTitle(5,'Process analysis')}
@@ -134,7 +136,6 @@ function overview(data) {
     ${process.lower_control_limit_c==null?'':lineChart(series,{label:'Individuals control chart',xLabel:'Recorded time (UTC)',yLabel:'Temperature (°C)',lower:process.lower_control_limit_c,upper:process.upper_control_limit_c,center:process.center_line_c,limitText:'control limit',marker:shownIncident?Date.parse(shownIncident.cooling_loss_utc):null})}
     <p class="plain-note">Control limits: baseline behavior · Storage limits: ${s.lower_limit_c}–${s.upper_limit_c} °C</p>
   </section>
-  <details class="panel"><summary>Financial impact</summary><div class="metric-grid two">${card('Inventory exposed',usd(data.financial.inventory_exposed_usd),'Current scenario')}${card('Recorded loss',usd(data.financial.actual_historical_loss_usd),'Synthetic history')}</div></details>
   ${data.warnings.length?`<details class="warnings"><summary>Data limitations (${data.warnings.length})</summary><ul>${data.warnings.map(w=>`<li>${esc(w.message)}</li>`).join('')}</ul></details>`:''}`;
 }
 

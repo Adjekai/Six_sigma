@@ -1,3 +1,4 @@
 equipment_id,site_id,equipment_type,model_group,generator_id,observation_start_utc,observation_end_utc,mechanical_operating_hours
 R-B1,CENTRAL,refrigerator,CW-100,G-C,2021-10-21T12:00:00Z,2026-10-20T12:00:00Z,10000.0
 R-B2,CENTRAL,refrigerator,CW-100,G-C,2021-10-21T12:00:00Z,2026-10-20T12:00:00Z,10000.0
+R-B3,CENTRAL,refrigerator,CW-100,G-C,2021-10-21T12:00:00Z,2026-10-20T12:00:00Z,10000.0

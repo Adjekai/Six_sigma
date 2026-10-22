@@ -27,8 +27,8 @@ def test_breakdown_has_known_mechanical_rate_and_loss():
     result = build_dashboard("refrigerator_breakdown", horizon_operating_days=1_000 / 24)
     reliability = result["reliability"]["refrigerators"][0]
     assert reliability["failures"] == 2
-    assert reliability["exposure_hours"] == 20_000
-    assert reliability["failure_probability"] == pytest.approx(0.09516258196404048)
+    assert reliability["exposure_hours"] == 30_000
+    assert reliability["failure_probability"] == pytest.approx(0.06449301496838222)
     assert result["financial"]["actual_historical_loss_usd"] == 7_500
 
 

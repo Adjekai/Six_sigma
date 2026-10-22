@@ -11,7 +11,7 @@
     "All values, events, inventory, and outcomes are synthetic."
   ],
   "planted_truth": [
-    "2 mechanical failures / 20,000 operating hours",
+    "2 mechanical failures / 30,000 operating hours",
     "R-B1 breaches above 6 C",
     "$7,500 simulated historical write-off"
   ]

@@ -107,7 +107,7 @@ def current_snapshots(refrigerator_ids: list[str], values: list[tuple[int, float
 
 def build_normal() -> dict:
     rng = random.Random(1101)
-    refrigerator_ids = ["R-N1", "R-N2"]
+    refrigerator_ids = ["R-N1", "R-N2", "R-N3"]
     blackout_rows = historical_blackouts("NORTH", "G-N", 10, set())
     recent_blackout = blackout_rows[-1]
     cooling_loss = datetime.fromisoformat(recent_blackout["start_utc"].replace("Z", "+00:00"))
@@ -131,7 +131,7 @@ def build_normal() -> dict:
             "blackout_id": "",
         },
     ]
-    inventory = current_snapshots(refrigerator_ids, [(400, 240), (350, 240)])
+    inventory = current_snapshots(refrigerator_ids, [(400, 240), (350, 240), (300, 240)])
     inventory.append(
         {
             "record_type": "incident_outcome",
@@ -150,7 +150,7 @@ def build_normal() -> dict:
         "name": "Normal / resilient",
         "description": "Temperatures remain within limits and all recorded backup starts succeed.",
         "seed": 1101,
-        "equipment": equipment_rows(refrigerator_ids, "NORTH", "G-N", [15000, 18000]),
+        "equipment": equipment_rows(refrigerator_ids, "NORTH", "G-N", [15000, 18000, 16500]),
         "temperatures": temperature_rows(rng, refrigerator_ids),
         "incidents": incidents,
         "blackouts": blackout_rows,
@@ -161,7 +161,7 @@ def build_normal() -> dict:
 
 def build_breakdown() -> dict:
     rng = random.Random(2202)
-    refrigerator_ids = ["R-B1", "R-B2"]
+    refrigerator_ids = ["R-B1", "R-B2", "R-B3"]
     # Index 80 is 08:00 on the displayed reference day.
     warming = {80 + offset: value for offset, value in enumerate([4.0, 4.4, 4.9, 5.5, 6.0, 6.4, 6.8, 5.7, 4.8])}
     incidents = [
@@ -184,7 +184,7 @@ def build_breakdown() -> dict:
             "blackout_id": "",
         },
     ]
-    inventory = current_snapshots(refrigerator_ids, [(500, 250), (320, 250)])
+    inventory = current_snapshots(refrigerator_ids, [(500, 250), (320, 250), (280, 250)])
     inventory.extend(
         [
             {
@@ -216,12 +216,12 @@ def build_breakdown() -> dict:
         "name": "Refrigerator breakdown",
         "description": "A mechanical failure causes warming, a detected limit breach, recovery, and simulated write-off.",
         "seed": 2202,
-        "equipment": equipment_rows(refrigerator_ids, "CENTRAL", "G-C", [10000, 10000]),
+        "equipment": equipment_rows(refrigerator_ids, "CENTRAL", "G-C", [10000, 10000, 10000]),
         "temperatures": temperature_rows(rng, refrigerator_ids, {"R-B1": warming}),
         "incidents": incidents,
         "blackouts": historical_blackouts("CENTRAL", "G-C", 8, set()),
         "inventory": inventory,
-        "planted_truth": ["2 mechanical failures / 20,000 operating hours", "R-B1 breaches above 6 C", "$7,500 simulated historical write-off"],
+        "planted_truth": ["2 mechanical failures / 30,000 operating hours", "R-B1 breaches above 6 C", "$7,500 simulated historical write-off"],
     }
 
 
