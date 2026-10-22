@@ -7,7 +7,6 @@ const usd = v => v == null ? 'Not enough data' : new Intl.NumberFormat('en-US', 
 const minutes = hours => hours == null ? 'Not enough data' : `${num(hours * 60, 0)} min`;
 const clock = time => new Intl.DateTimeFormat('en-US', {timeZone:'UTC',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(time));
 const currentTimestamp = () => new Intl.DateTimeFormat('en-US', {month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true,timeZoneName:'short'}).format(new Date());
-const titleCase = value => String(value ?? '').toLowerCase().replace(/\b\w/g, letter => letter.toUpperCase());
 const refrigeratorName = id => {
   const number = String(id ?? '').match(/(\d+)$/)?.[1];
   return number ? `Refrigerator ${number}` : `Refrigerator ${id}`;
@@ -67,14 +66,13 @@ function overview(data) {
   const within=equipment.filter(row=>row.status==='within_limits').length;
   const review=equipment.filter(row=>row.status==='review_required').length;
   const unknown=equipment.filter(row=>row.status==='unknown').length;
-  const site=data.selection.site_id||data.selection.available_sites[0];
   const inventoryRows=inventory.by_refrigerator.map(row=>`<tr><td><strong>${esc(refrigeratorName(row.refrigerator_id))}</strong><br><small>${esc(row.refrigerator_id)}</small></td><td>${num(row.bags_present,0)}</td><td>${row.lot_count}</td><td>${usd(row.inventory_value_usd)}</td></tr>`).join('');
   return `<section class="panel overview-panel"><h2>Overview</h2>
     <div class="metric-grid four">
       ${card('Inventory',`${num(inventory.bags_present,0)} bags`,`${inventory.lot_count} lots · ${usd(inventory.inventory_value_usd)}`)}
       ${card('Storage range',`${s.lower_limit_c}–${s.upper_limit_c} °C`,'Refrigerated blood')}
       ${card('Refrigerators',`${within} of ${equipment.length} within range`,review||unknown?`${review} need review · ${unknown} unknown`:'All refrigerators')}
-      ${card('Currently viewing',esc(refrigeratorName(data.selection.refrigerator_id)),`ID ${esc(data.selection.refrigerator_id)} · ${esc(titleCase(site))} site`)}
+      ${card('Currently viewing',esc(refrigeratorName(data.selection.refrigerator_id)),`ID ${esc(data.selection.refrigerator_id)}`)}
     </div>
     <h3>Inventory by refrigerator</h3>
     <div class="table-wrap"><table><thead><tr><th>Refrigerator</th><th>Bags</th><th>Lots</th><th>Value</th></tr></thead><tbody>${inventoryRows}</tbody></table></div>
