@@ -6,6 +6,7 @@ const pct = v => v == null ? 'Not enough data' : `${num(v * 100, 1)}%`;
 const usd = v => v == null ? 'Not enough data' : new Intl.NumberFormat('en-US', {style:'currency',currency:'USD',maximumFractionDigits:0}).format(v);
 const minutes = hours => hours == null ? 'Not enough data' : `${num(hours * 60, 0)} min`;
 const clock = time => new Intl.DateTimeFormat('en-US', {timeZone:'UTC',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(time));
+const currentTimestamp = () => new Intl.DateTimeFormat('en-US', {month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true,timeZoneName:'short'}).format(new Date());
 const titleCase = value => String(value ?? '').toLowerCase().replace(/\b\w/g, letter => letter.toUpperCase());
 const refrigeratorName = id => {
   const number = String(id ?? '').match(/(\d+)$/)?.[1];
@@ -122,7 +123,7 @@ function render() {
   const fridgeOptions=(data?.selection.available_refrigerators||[]).map(id=>`<option value="${esc(id)}"${id===(state.refrigeratorId||data?.selection.refrigerator_id)?' selected':''}>${esc(refrigeratorName(id))} (${esc(id)})</option>`).join('');
   root.innerHTML=`<main><header class="masthead"><div><p class="eyebrow">Storage · response · reliability</p><h1>BloodWatch</h1></div></header>
     <section class="controls" aria-label="Dashboard controls"><label>Choose a scenario<select id="scenario" ${state.busy?'disabled':''}>${state.scenarios.map(s=>`<option value="${esc(s.id)}"${s.id===state.scenario?' selected':''}>${esc(s.name)}</option>`).join('')}</select></label><label>Refrigerator<select id="refrigerator" ${state.busy?'disabled':''}>${fridgeOptions}</select></label><label>Temperature history<select id="window" ${state.busy?'disabled':''}>${[6,24].map(v=>`<option value="${v}"${v===state.windowHours?' selected':''}>Last ${v} hours</option>`).join('')}</select></label></section>
-    <div aria-live="polite">${state.error?`<p class="error" role="alert">${esc(state.error)}</p>`:state.busy?'<p class="loading">Updating analysis…</p>':data?`<p class="context">${esc(data.scenario.name)} · ${esc(data.scenario.reference_time_utc)}</p>${overview(data)}`:'<p class="loading">Loading dashboard…</p>'}</div>
+    <div aria-live="polite">${state.error?`<p class="error" role="alert">${esc(state.error)}</p>`:state.busy?'<p class="loading">Updating analysis…</p>':data?`<p class="context">Current time: <span id="current-time">${esc(currentTimestamp())}</span></p>${overview(data)}`:'<p class="loading">Loading dashboard…</p>'}</div>
     <footer>Synthetic educational data. Storage breaches require review.</footer></main>`;
   root.querySelector('#scenario').addEventListener('change',e=>{state.scenario=e.target.value;state.refrigeratorId='';loadDashboard();});
   root.querySelector('#refrigerator').addEventListener('change',e=>{state.refrigeratorId=e.target.value;loadDashboard();});
@@ -144,3 +145,7 @@ async function start() {
   catch(error){state.error=error.message;state.busy=false;render();}
 }
 start();
+setInterval(() => {
+  const display=document.querySelector('#current-time');
+  if(display) display.textContent=currentTimestamp();
+},1000);
