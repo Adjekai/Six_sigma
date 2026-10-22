@@ -75,6 +75,8 @@ py scripts\project.py run
 
 Open <http://127.0.0.1:8000>. API documentation is available at <http://127.0.0.1:8000/docs>.
 
+Press `Ctrl+C` in the same terminal that started BloodWatch to stop the server. This works on macOS and Windows. If port 8000 is already in use, another terminal or application already owns that port; stop that process before starting BloodWatch again.
+
 ## Verify
 
 ```sh

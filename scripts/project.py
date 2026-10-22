@@ -28,9 +28,23 @@ class ProjectError(RuntimeError):
 
 def run(command: list[str], *, cwd: Path = ROOT, env: dict[str, str] | None = None) -> None:
     print("+", " ".join(command), flush=True)
-    completed = subprocess.run(command, cwd=cwd, env=env, check=False)
-    if completed.returncode:
-        raise ProjectError(f"Command failed with exit code {completed.returncode}: {' '.join(command)}")
+    process = subprocess.Popen(command, cwd=cwd, env=env)
+    try:
+        returncode = process.wait()
+    except KeyboardInterrupt:
+        # Ctrl+C is normally delivered to both processes because they share a
+        # console/process group. Explicit cleanup also covers platforms or
+        # timing windows where the child does not receive the interrupt.
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+        raise
+    if returncode:
+        raise ProjectError(f"Command failed with exit code {returncode}: {' '.join(command)}")
 
 
 def python_supported() -> bool:
