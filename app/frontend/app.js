@@ -1,12 +1,12 @@
 const root = document.querySelector('#root');
-const state = { refrigeratorId: '', availableRefrigerators: [], horizonDays: 30, windowHours: 6, data: null, error: '', busy: false, request: 0 };
+const state = { scenario: 'stable', refrigeratorId: '', availableRefrigerators: [], horizonDays: 30, windowHours: 6, data: null, error: '', busy: false, request: 0 };
 const esc = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
 const num = (v, digits = 2) => v == null ? 'Not enough data' : Number(v).toLocaleString('en-US', {maximumFractionDigits: digits});
 const pct = v => v == null ? 'Not enough data' : `${num(v * 100, 1)}%`;
 const usd = v => v == null ? 'Not enough data' : new Intl.NumberFormat('en-US', {style:'currency',currency:'USD',maximumFractionDigits:0}).format(v);
 const minutes = hours => hours == null ? 'Not enough data' : `${num(hours * 60, 0)} min`;
 const clock = time => new Intl.DateTimeFormat('en-US', {timeZone:'UTC',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(time));
-const currentTimestamp = () => new Intl.DateTimeFormat('en-US', {month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true,timeZoneName:'short'}).format(new Date());
+const fullTimestamp = time => new Intl.DateTimeFormat('en-US', {timeZone:'UTC',year:'numeric',month:'long',day:'numeric',hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true,timeZoneName:'short'}).format(new Date(time));
 const refrigeratorName = id => {
   const number = String(id ?? '').match(/(\d+)$/)?.[1];
   return number ? `Refrigerator ${number}` : `Refrigerator ${id}`;
@@ -69,7 +69,6 @@ function overview(data) {
   const coolingMarkers=visibleIncidents.map(row=>({x:Date.parse(row.cooling_loss_utc),label:row.cause==='mechanical'?`${row.incident_id}: refrigerator failure`:`${row.incident_id}: generator start failure`}));
   const status=s.state==='within_limits'?'Within range':s.state==='unknown'?'Unknown':'Review required';
   const rows=detailed.map(row=>`<tr><td><strong>${row.cause==='mechanical'?'Refrigerator mechanical failure':'Backup generator failed to start'}</strong><br><small>Event ${esc(row.incident_id)}</small></td><td>${row.breach_status==='breached'?minutes(row.observed_hours_to_breach_or_censoring):row.breach_status==='unknown'?'No matching temperature readings':'No reading outside 1–6 °C before recovery'}</td><td>${minutes(row.recovery_hours)}</td></tr>`).join('');
-  const zeroFailures=fridge.failures===0;
   const missingBreachValue='No out-of-range reading';
   const missingBreachNote='No observed out-of-range time';
   const within=equipment.filter(row=>row.status==='within_limits').length;
@@ -89,7 +88,7 @@ function overview(data) {
   </section>`;
   const sections=`<section class="panel">${sectionTitle(1,'Temperature')}
     <div class="metric-grid three">
-      ${card('Latest',s.latest_temperature_c==null?'Unknown':`${num(s.latest_temperature_c)} °C`,`${esc(status)} · ${s.latest_timestamp_utc?clock(s.latest_timestamp_utc)+' UTC':''}`)}
+      ${card('Latest temperature reading',s.latest_temperature_c==null?'Unknown':`${num(s.latest_temperature_c)} °C`,`${esc(status)} · ${s.latest_timestamp_utc?fullTimestamp(s.latest_timestamp_utc):'timestamp unavailable'}`)}
       ${card('Average',`${num(s.mean_c)} °C`,`${num(s.minimum_c)}–${num(s.maximum_c)} °C`)}
       ${card('Sample standard deviation',s.standard_deviation_c==null?'Not enough data':`${num(s.standard_deviation_c)} °C`,'Variation among valid readings')}
     </div>
@@ -97,35 +96,31 @@ function overview(data) {
     <p class="source"><a href="https://www.law.cornell.edu/cfr/text/21/640.11" target="_blank" rel="noopener">1–6 °C storage reference</a></p>
   </section>
   <section class="panel">${sectionTitle(2,'Cooling interruptions')}
-    <p class="plain-note">For each interruption, BloodWatch records when cooling stopped, when temperature first moved outside 1–6 °C, and when cooling was restored.</p>
-    <div class="breach-definition"><span>Cooling lost</span><strong aria-hidden="true">→</strong><span>First reading outside 1–6 °C</span><strong aria-hidden="true">→</strong><span>Cooling restored</span></div>
     <div class="metric-grid two">
       ${card('Most recent limit crossing',latest?minutes(latest.observed_hours_to_breach_or_censoring):missingBreachValue,latest?`${latest.cause==='mechanical'?'Refrigerator failure':'Generator start failure'} · ${esc(latest.incident_id)}`:missingBreachNote)}
       ${card('Average limit-crossing time',incident.mean_observed_hours_to_breach_breached_only==null?missingBreachValue:minutes(incident.mean_observed_hours_to_breach_breached_only),incident.breached_count?`Across ${incident.breached_count} interruptions that crossed the storage range`:missingBreachNote)}
     </div>
-    <p class="plain-note">${detailed.length} recorded interruptions · ${incident.breached_count} crossed 1–6 °C · ${incident.unbreached_censored_count} stayed within range until recovery · ${incident.unknown_count} lack matching temperature readings</p>
-    <details><summary>See every interruption and recovery time</summary>${rows?`<div class="table-wrap"><table><thead><tr><th>Interruption</th><th>Cooling loss to first reading outside 1–6 °C</th><th>Cooling loss to restoration</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p>No recorded cooling interruptions for this refrigerator.</p>'}<p class="plain-note">A limit crossing is an observed storage-temperature event, not a measurement of when blood becomes biologically unusable.</p></details>
+    <p class="plain-note">${detailed.length} interruptions recorded: ${incident.breached_count} crossed 1–6 °C; ${incident.unbreached_censored_count} recovered before a crossing; ${incident.unknown_count} lack readings. These are observed temperatures, not a product viability or disposition decision.</p>
+    <details><summary>Interruption evidence and recovery times</summary>${rows?`<div class="table-wrap"><table><thead><tr><th>Interruption</th><th>Cooling loss to first reading outside 1–6 °C</th><th>Cooling loss to restoration</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p>No recorded cooling interruptions for this refrigerator.</p>'}</details>
   </section>
-  <section class="panel">${sectionTitle(3,'Failure risk')}
-    <div class="metric-grid four">
-      ${card('Refrigerator mechanical failures',num(fridge.failures,0),`${num(fridge.exposure_hours,0)} observed operating hours · blackouts excluded`)}
-      ${card('Refrigerator failure probability',zeroFailures?'No failures observed':pct(fridge.failure_probability),`Within the selected ${state.horizonDays}-day forecast period`)}
-      ${card('Generator failed starts',`${generator.failed_demands} of ${generator.known_demands}`,`${generator.successful_demands} successful starts · ${generator.unknown_demands} unknown excluded`)}
-      ${card('Generator failed-start probability',pct(generator.failed_start_probability),'Failed starts ÷ known blackout demands')}
+  <section class="panel reliability-summary"><h2>Reliability summary</h2>
+    <div class="metric-grid two">
+      ${card('Refrigerator failure probability',pct(fridge.failure_probability),`Model estimate over ${state.horizonDays} days`)}
+      ${card('Generator failed-start probability',pct(generator.failed_start_probability),`${generator.failed_demands} failed of ${generator.known_demands} known starts`)}
     </div>
-    ${zeroFailures?`<p class="plain-note">95% upper rate: ${num(fridge.rate_interval_95.upper,6)} per hour</p>`:lineChart(fridge.cdf.map(p=>({x:p.operating_hours/24,y:p.failure_probability})),{label:'Probability of a refrigerator mechanical failure by operating time',xLabel:'Future operating time (days)',yLabel:'Failure probability F(t)',probability:true})}
+    <p class="plain-note">Statistical estimates from synthetic history; observed alarms are summarized above.</p>
   </section>
-  <section class="panel">${sectionTitle(4,'Reliability metrics')}
+  <details class="methods-details"><summary>Methods and details</summary><div class="methods-content">
+    <h2>Reliability metrics</h2>
     <div class="metric-grid three">
-      ${card('Failure rate λ',`${num(fridge.rate_per_hour,6)} / hour`,'Failures ÷ operating hours')}
-      ${card('Reliability R(t)',pct(fridge.reliability),`No failure through ${state.horizonDays} days`)}
-      ${card('Failure probability F(t)',pct(fridge.failure_probability),`Failure within ${state.horizonDays} days`)}
-      ${card('Hazard h(t)',`${num(fridge.rate_per_hour,6)} / hour`,'Constant-rate model')}
+      ${card('Mechanical failures / exposure',`${num(fridge.failures,0)} / ${num(fridge.exposure_hours,0)} h`,'Observed refrigerator failures ÷ operating hours')}
+      ${card('Failure rate / hazard',`${num(fridge.rate_per_hour,6)} / hour`,'Constant-rate model')}
       ${card('MTBF',fridge.mtbf_hours==null?'Unavailable':`${num(fridge.mtbf_hours,0)} hours`,fridge.mtbf_hours==null?'No mechanical failures observed':'Mean time between failures')}
-      ${card('Backup generator uncertainty',`${pct(generator.wilson_interval_95.lower)}–${pct(generator.wilson_interval_95.upper)}`,'95% failed-start interval')}
+      ${card('Successful / failed starts',`${generator.successful_demands} / ${generator.failed_demands}`,`${generator.unknown_demands} unknown excluded`)}
+      ${card('Generator uncertainty interval',`${pct(generator.wilson_interval_95.lower)}–${pct(generator.wilson_interval_95.upper)}`,'95% failed-start interval')}
+      ${card('95% failure-rate interval',`${num(fridge.rate_interval_95.lower,6)}–${num(fridge.rate_interval_95.upper,6)} / hour`,'Model uncertainty range')}
     </div>
-  </section>
-  <section class="panel">${sectionTitle(5,'Process analysis')}
+    <h2>Temperature process diagnostics</h2>
     <div class="metric-grid three">
       ${card('Standard error',process.standard_error_c==null?'Unavailable':`${num(process.standard_error_c,3)} °C`,'s ÷ √n')}
       ${card('Control limits',process.lower_control_limit_c==null?'Unavailable':`${num(process.lower_control_limit_c)}–${num(process.upper_control_limit_c)} °C`,`${process.baseline_count} fixed normal-baseline readings`)}
@@ -137,9 +132,21 @@ function overview(data) {
     ${process.lower_control_limit_c==null?'':lineChart(series,{label:'Individuals control chart with cooling-loss events',xLabel:'Recorded time (UTC)',yLabel:'Temperature (°C)',lower:process.lower_control_limit_c,upper:process.upper_control_limit_c,center:process.center_line_c,limitText:'control limit',markers:coolingMarkers})}
     <p class="plain-note">Control limits: fixed normal behavior · Storage specifications: ${s.lower_limit_c}–${s.upper_limit_c} °C</p>
     <p class="plain-note">${esc(process.capability_explanation)}</p>
-  </section>
+  </div></details>
   ${data.warnings.length?`<details class="warnings"><summary>Data limitations (${data.warnings.length})</summary><ul>${data.warnings.map(w=>`<li>${esc(w.message)}</li>`).join('')}</ul></details>`:''}`;
   return {overviewPanel,sections};
+}
+
+function scenarioPanel(scenario) {
+  const alarm=scenario.observed_alarm;
+  if(!alarm) return `<section class="scenario-result" aria-live="polite"><strong>${esc(scenario.label)} · Synthetic demo data</strong><p>${esc(scenario.description)}</p><p class="plain-note">No observed alarm. Temperatures remain within 1–6 °C and power is steady.</p></section>`;
+  const recovery=alarm.recovery_hours==null?'Not observed':`${num(alarm.recovery_hours)} hours`;
+  const excursion=alarm.excursion_duration_hours==null?'Not observed':`${num(alarm.excursion_duration_hours)} hours`;
+  const alarmText=scenario.id==='degrading_refrigerator'
+    ? `Observed temperature excursion · ${refrigeratorName(alarm.refrigerator_id)} marked for review`
+    : `Observed temperature alarm during failed generator start · ${refrigeratorName(alarm.refrigerator_id)} marked for review`;
+  const outage=alarm.outage_duration_hours==null?'':`<div><dt>Blackout duration</dt><dd>${num(alarm.outage_duration_hours)} hours</dd></div>`;
+  return `<section class="scenario-result scenario-result--review" aria-live="polite"><strong>${esc(scenario.label)} · Synthetic demo data</strong><p>${esc(scenario.description)}</p><h2>${esc(alarmText)}</h2><dl>${outage}<div><dt>Time to first reading outside 1–6 °C</dt><dd>${minutes(alarm.hours_to_first_breach)}</dd></div><div><dt>Observed excursion duration</dt><dd>${esc(excursion)}</dd></div><div><dt>Cooling recovery time</dt><dd>${esc(recovery)}</dd></div><div><dt>Affected inventory value</dt><dd>${usd(alarm.affected_inventory_value_usd)}</dd></div></dl><p class="plain-note">This is an observed demo event. Statistical risk estimates appear separately below; this dashboard does not make product-disposition decisions.</p></section>`;
 }
 
 function render() {
@@ -149,12 +156,16 @@ function render() {
   const fridgeOptions=state.availableRefrigerators.length
     ? state.availableRefrigerators.map(id=>`<option value="${esc(id)}"${id===selectedRefrigerator?' selected':''}>${esc(refrigeratorName(id))} (${esc(refrigeratorCode(id))})</option>`).join('')
     : `<option value="">${state.error?'Refrigerators unavailable':'Loading refrigerators…'}</option>`;
+  const scenarioOptions=[['stable','Stable'],['degrading_refrigerator','Degrading Refrigerator'],['blackout_failed_generator','Blackout with Failed Generator']];
   root.innerHTML=`<main><header class="masthead"><div><p class="eyebrow">Storage · response · reliability</p><h1>BloodWatch</h1></div></header>
+    <section class="controls" aria-label="Dashboard controls"><label>Demo scenario<select id="scenario" ${state.busy?'disabled':''}>${scenarioOptions.map(([id,label])=>`<option value="${id}"${id===state.scenario?' selected':''}>${label}</option>`).join('')}</select></label><label>Refrigerator<select id="refrigerator" ${state.busy?'disabled':''}>${fridgeOptions}</select></label><label>Temperature history<select id="window" ${state.busy?'disabled':''}>${[6,24].map(v=>`<option value="${v}"${v===state.windowHours?' selected':''}>Last ${v} hours</option>`).join('')}</select></label><label>Operating period<select id="horizon" ${state.busy?'disabled':''}>${[7,30,90].map(days=>`<option value="${days}"${days===state.horizonDays?' selected':''}>${days} days</option>`).join('')}</select></label></section>
+    ${data?.scenario?scenarioPanel(data.scenario):''}
+    ${data?`<p class="dataset-time"><strong>Synthetic dataset reference time:</strong> ${fullTimestamp(data.dataset.reference_time_utc)} <span>Demo data timestamp; it is not the computer's current time.</span></p>`:''}
     ${content?.overviewPanel||''}
-    <section class="controls" aria-label="Dashboard controls"><label>Refrigerator<select id="refrigerator" ${state.busy?'disabled':''}>${fridgeOptions}</select></label><label>Temperature history<select id="window" ${state.busy?'disabled':''}>${[6,24].map(v=>`<option value="${v}"${v===state.windowHours?' selected':''}>Last ${v} hours</option>`).join('')}</select></label><label>Operating period<select id="horizon" ${state.busy?'disabled':''}>${[7,30,90].map(days=>`<option value="${days}"${days===state.horizonDays?' selected':''}>${days} days</option>`).join('')}</select></label></section>
-    <div aria-live="polite">${state.error?`<p class="error" role="alert">${esc(state.error)}</p>`:state.busy?'<p class="loading">Updating analysis…</p>':content?`<p class="context">Current time: <span id="current-time">${esc(currentTimestamp())}</span></p>${content.sections}`:'<p class="loading">Loading dashboard…</p>'}</div>
+    <div aria-live="polite">${state.error?`<p class="error" role="alert">${esc(state.error)}</p>`:state.busy?'<p class="loading">Updating analysis…</p>':content?content.sections:'<p class="loading">Loading dashboard…</p>'}</div>
     <footer>Synthetic educational data. Storage breaches require review.</footer></main>`;
   root.querySelector('#refrigerator').addEventListener('change',e=>{state.refrigeratorId=e.target.value;loadDashboard();});
+  root.querySelector('#scenario').addEventListener('change',e=>{state.scenario=e.target.value;loadDashboard();});
   root.querySelector('#window').addEventListener('change',e=>{state.windowHours=Number(e.target.value);loadDashboard();});
   root.querySelector('#horizon')?.addEventListener('change',e=>{state.horizonDays=Number(e.target.value);loadDashboard();});
 }
@@ -163,6 +174,7 @@ async function loadDashboard() {
   const request=++state.request;
   state.busy=true; state.error=''; render();
   const params=new URLSearchParams({horizon_operating_days:String(state.horizonDays),temperature_window_hours:String(state.windowHours)});
+  params.set('scenario',state.scenario);
   if(state.refrigeratorId) params.set('refrigerator_id',state.refrigeratorId);
   try {const data=await getJson(`/api/dashboard?${params}`); if(request!==state.request)return;state.data=data;state.availableRefrigerators=data.selection.available_refrigerators;state.refrigeratorId=data.selection.refrigerator_id;}
   catch(error){if(request!==state.request)return;state.error=error.message;}
@@ -173,7 +185,3 @@ async function start() {
   catch(error){state.error=error.message;state.busy=false;render();}
 }
 start();
-setInterval(() => {
-  const display=document.querySelector('#current-time');
-  if(display) display.textContent=currentTimestamp();
-},1000);
