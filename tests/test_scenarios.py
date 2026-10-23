@@ -77,6 +77,7 @@ def test_degrading_refrigerator_demo_flags_breach_and_inventory_value():
     assert alarm["status"] == "review_required"
     assert alarm["refrigerator_id"] == "R1"
     assert alarm["affected_inventory_value_usd"] == 400 * 240
+    assert alarm["excursion_duration_hours"] > 0
     assert refrigerator["status"] == "review_required"
 
 
@@ -90,3 +91,29 @@ def test_blackout_demo_adds_one_failed_start_and_three_cooling_events():
     assert result["reliability"]["selected_generator"]["failed_demands"] == 3
     assert len(event_rows) == 3
     assert all(row["breach_status"] == "breached" for row in event_rows)
+    alarm = result["scenario"]["observed_alarm"]
+    assert alarm["outage_duration_hours"] == 1
+    assert alarm["recovery_hours"] is not None
+
+
+def test_live_temperature_does_not_change_csv_baseline_or_reliability(tmp_path, monkeypatch):
+    from datetime import datetime, timezone
+    from bloodwatch.live_data import record_temperature_reading
+
+    monkeypatch.setenv("BLOODWATCH_LIVE_DB", str(tmp_path / "live.sqlite3"))
+    baseline = build_dashboard()
+    record_temperature_reading("R1", datetime(2026, 10, 21, 12, tzinfo=timezone.utc), 5.9, True, "test")
+    live = build_dashboard()
+    assert live["conditions"]["process_analysis"]["center_line_c"] == baseline["conditions"]["process_analysis"]["center_line_c"]
+    assert live["conditions"]["process_analysis"]["upper_control_limit_c"] == baseline["conditions"]["process_analysis"]["upper_control_limit_c"]
+    assert live["reliability"]["refrigerators"][0]["failures"] == baseline["reliability"]["refrigerators"][0]["failures"] == 2
+    assert live["reliability"]["refrigerators"][0]["exposure_hours"] == baseline["reliability"]["refrigerators"][0]["exposure_hours"] == 49_366
+
+
+def test_scenario_switch_returns_distinct_reference_and_alarm_data():
+    stable = build_dashboard(scenario="stable")
+    degrading = build_dashboard(scenario="degrading_refrigerator")
+    blackout = build_dashboard(scenario="blackout_failed_generator")
+    assert stable["scenario"]["id"] == "stable" and stable["scenario"]["observed_alarm"] is None
+    assert degrading["scenario"]["observed_alarm"]["excursion_duration_hours"] is not None
+    assert blackout["scenario"]["observed_alarm"]["cause"] == "generator_failed_start"

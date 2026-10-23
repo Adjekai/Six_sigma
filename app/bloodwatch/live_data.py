@@ -22,7 +22,7 @@ def record_temperature_reading(
     temperature_c: float | None,
     reading_valid: bool,
     source: str,
-) -> None:
+) -> bool:
     path = _database_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(path, timeout=10) as connection:
@@ -38,17 +38,41 @@ def record_temperature_reading(
             )
             """
         )
-        connection.execute(
+        timestamp_text = timestamp.astimezone(timezone.utc).isoformat()
+        if connection.execute(
+            "SELECT 1 FROM temperature_readings WHERE refrigerator_id = ? AND timestamp_utc = ? LIMIT 1",
+            (refrigerator_id, timestamp_text),
+        ).fetchone():
+            return False
+        cursor = connection.execute(
             """
-            INSERT INTO temperature_readings
+            INSERT OR IGNORE INTO temperature_readings
                 (refrigerator_id, timestamp_utc, temperature_c, reading_valid, source)
             VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT (refrigerator_id, timestamp_utc, source) DO UPDATE SET
-                temperature_c = excluded.temperature_c,
-                reading_valid = excluded.reading_valid
             """,
-            (refrigerator_id, timestamp.astimezone(timezone.utc).isoformat(), temperature_c, int(reading_valid), source),
+            (refrigerator_id, timestamp_text, temperature_c, int(reading_valid), source),
         )
+        return cursor.rowcount == 1
+
+
+def record_rejected_reading(reason: str) -> None:
+    path = _database_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(path, timeout=10) as connection:
+        connection.execute("CREATE TABLE IF NOT EXISTS rejected_readings (reason TEXT NOT NULL, rejected_at_utc TEXT NOT NULL)")
+        connection.execute("INSERT INTO rejected_readings VALUES (?, ?)", (reason, datetime.now(timezone.utc).isoformat()))
+
+
+def rejected_reading_summary() -> dict[str, Any]:
+    path = _database_path()
+    if not path.exists():
+        return {"count": 0, "reasons": []}
+    with sqlite3.connect(path, timeout=10) as connection:
+        try:
+            rows = connection.execute("SELECT reason, COUNT(*) FROM rejected_readings GROUP BY reason ORDER BY reason").fetchall()
+        except sqlite3.OperationalError:
+            rows = []
+    return {"count": sum(row[1] for row in rows), "reasons": [{"reason": row[0], "count": row[1]} for row in rows]}
 
 
 def load_temperature_readings() -> list[dict[str, Any]]:

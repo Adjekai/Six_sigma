@@ -20,8 +20,19 @@ def test_dashboard_frontend_is_served_without_a_build_step():
     frontend = client.get("/app.js").text
     assert "loadDashboard" in frontend
     assert "Data limitations" not in frontend
-    assert "Live data" in frontend
-    assert "Demo · Degrading refrigerator" in frontend
+    assert "Live history (opt in)" in frontend
+    assert "Demo scenario / data mode" in frontend
+    assert "Computer current time" in frontend
+    assert "Dataset reference" in frontend
+    assert "Methods and details" in frontend
+    assert "Demo data as of" in frontend
+    assert "row.reading_count" in frontend
+    assert "row.slope_c_per_hour" in frontend
+    assert "fullTimestamp(row.as_of_utc)" in frontend
+    assert "Estimate; linear fit; N=" in frontend
+    assert "card('Observed out of specification'" in frontend
+    assert "card('Ppk / observed out-of-spec'" not in frontend
+    assert "Degrading refrigerator" in frontend
 
 
 def test_dashboard_uses_coherent_dataset():
@@ -41,6 +52,11 @@ def test_dashboard_exposes_temperature_risk_and_inventory_exposure():
     assert all(row["forecast_minutes"] == 60 for row in forecasts)
     assert all(row["inventory_value_usd"] == row["inventory_bags"] * 240 for row in forecasts)
     assert all(row["status"] in {"within_limits", "approaching_limit", "currently_out_of_range", "unknown", "insufficient_data"} for row in forecasts)
+    assert all(row["decision_support_status"] in {"In range", "Watch", "At risk"} for row in forecasts)
+    assert all(row["decision_support_reason"] for row in forecasts)
+    assert all(row["as_of_utc"] == response.json()["dataset"]["reference_time_utc"] for row in forecasts)
+    assert all(row["method"].startswith("Linear fit") for row in forecasts)
+    assert all("reading_count" in row and "slope_c_per_hour" in row for row in forecasts)
 
 
 def test_scenario_endpoint_lists_the_three_dataset_demos():
@@ -92,6 +108,44 @@ def test_live_reading_rejects_unknown_refrigerator_and_naive_timestamp():
     assert client.post("/api/readings", json=payload).status_code == 422
     payload["timestamp_utc"] = "2026-10-22T12:00:00Z"
     assert client.post("/api/readings", json=payload).status_code == 400
+
+
+def test_live_readings_reject_future_out_of_range_and_duplicate(tmp_path, monkeypatch):
+    monkeypatch.setenv("BLOODWATCH_LIVE_DB", str(tmp_path / "live.sqlite3"))
+    payload = {"refrigerator_id": "R1", "timestamp_utc": "2026-10-21T12:00:00Z", "temperature_c": 4.1}
+    assert client.post("/api/readings", json=payload).status_code == 201
+    assert client.post("/api/readings", json=payload).status_code == 409
+    payload["timestamp_utc"] = "2027-01-01T12:00:00Z"
+    assert client.post("/api/readings", json=payload).status_code == 400
+    payload["timestamp_utc"] = "2026-10-21T12:15:00Z"
+    payload["temperature_c"] = 100
+    assert client.post("/api/readings", json=payload).status_code == 422
+    body = client.get("/api/dashboard").json()
+    assert body["dataset"]["live_reading_count"] == 1
+    assert body["dataset"]["rejected_readings"]["count"] == 3
+
+
+def test_csv_upload_validates_required_header_and_accepts_rows(tmp_path, monkeypatch):
+    monkeypatch.setenv("BLOODWATCH_LIVE_DB", str(tmp_path / "live.sqlite3"))
+    assert client.post("/api/readings/upload", content="unit_id,temp_C\nR1,4").status_code == 400
+    response = client.post("/api/readings/upload", content="unit_id,timestamp,temp_C\nR1,2026-10-21T12:00:00Z,4.2")
+    assert response.status_code == 200
+    assert response.json() == {"accepted": 1}
+
+
+def test_dataset_reference_and_latest_reading_timestamps_are_explicit():
+    body = client.get("/api/dashboard", params={"scenario": "stable"}).json()
+    latest = body["conditions"]["temperature_summary"]["latest_timestamp_utc"]
+    assert latest == body["dataset"]["reference_time_utc"]
+    assert "T" in latest and latest.endswith("+00:00")
+    frontend = client.get("/app.js").text
+    assert "fullTimestamp(data.dataset.reference_time_utc)" in frontend
+
+
+def test_dashboard_controls_have_intermediate_responsive_layout():
+    css = client.get("/src/styles.css").text
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in css
+    assert "@media (min-width: 641px) and (max-width: 900px)" in css
 
 
 def test_demo_scenario_uses_csvs_without_live_rows_and_live_mode_still_includes_them(tmp_path, monkeypatch):

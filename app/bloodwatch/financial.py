@@ -6,6 +6,14 @@ from typing import Any
 from .common import warning
 
 
+def expected_inventory_loss(failure_probability: float | None, inventory_value_usd: float | None) -> float | None:
+    if failure_probability is None or inventory_value_usd is None:
+        return None
+    if not 0 <= failure_probability <= 1 or inventory_value_usd < 0:
+        raise ValueError("Expected-loss inputs must be a probability and nonnegative inventory value")
+    return failure_probability * inventory_value_usd
+
+
 def expected_annual_blackout_loss(
     blackouts_per_year: float,
     failed_start_probability: float | None,

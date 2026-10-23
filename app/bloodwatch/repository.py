@@ -54,10 +54,16 @@ def load_data(include_live_readings: bool = True) -> dict[str, Any]:
     }
     _coerce(data)
     _validate(data)
+    baseline_temperatures = [dict(row) for row in data["temperatures"]]
     live_readings = load_temperature_readings() if include_live_readings else []
+    live_readings = [row for row in live_readings if row["reading_valid"] and row["temperature_c"] is not None]
     data["live_reading_count"] = len(live_readings)
+    data["baseline_temperatures"] = baseline_temperatures
     data["temperatures"].extend(live_readings)
-    operational = [row["timestamp"] for row in data["temperatures"] if not _is_baseline_reading(row, data)]
+    operational = [
+        row["timestamp"] for row in data["temperatures"]
+        if row["reading_valid"] and row["temperature_c"] is not None and not _is_baseline_reading(row, data)
+    ]
     data["reference_time"] = max(operational)
     return data
 

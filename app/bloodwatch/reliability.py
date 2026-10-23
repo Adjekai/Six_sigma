@@ -44,12 +44,20 @@ def refrigerator_reliability(
     alpha = 1 - confidence_level
     rate = failures / exposure_hours
     lower = 0.0 if failures == 0 else 0.5 * chi2.ppf(alpha / 2, 2 * failures) / exposure_hours
-    upper = 0.5 * chi2.ppf(1 - alpha / 2, 2 * (failures + 1)) / exposure_hours
+    upper = (2.996 / exposure_hours if failures == 0 else 0.5 * chi2.ppf(1 - alpha / 2, 2 * (failures + 1)) / exposure_hours)
     result["rate_per_hour"] = rate
     result["rate_interval_95"] = {"lower": lower, "upper": upper}
     result["mtbf_hours"] = None if failures == 0 else 1 / rate
+    result["mtbf_interval_95"] = {
+        "lower": None if upper == 0 else 1 / upper,
+        "upper": None if lower == 0 else 1 / lower,
+    }
     result["reliability"] = math.exp(-rate * horizon_hours)
     result["failure_probability"] = 1 - result["reliability"]
+    result["failure_probability_interval_95"] = {
+        "lower": 1 - math.exp(-lower * horizon_hours),
+        "upper": 1 - math.exp(-upper * horizon_hours),
+    }
     result["cdf"] = [
         {"operating_hours": horizon_hours * index / 10, "failure_probability": 1 - math.exp(-rate * horizon_hours * index / 10)}
         for index in range(11)

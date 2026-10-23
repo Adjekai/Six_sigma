@@ -3,10 +3,11 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from bloodwatch.financial import expected_annual_blackout_loss
+from bloodwatch.financial import expected_annual_blackout_loss, expected_inventory_loss
 from bloodwatch.incidents import summarize_breach_and_recovery
 from bloodwatch.reliability import generator_reliability, refrigerator_reliability
 from bloodwatch.temperature import forecast_temperature_limit_crossing, summarize_temperature
+from bloodwatch.temperature import analyze_temperature_process
 
 
 UTC = timezone.utc
@@ -43,12 +44,23 @@ def test_refrigerator_known_answer():
     assert probabilities == sorted(probabilities)
 
 
+def test_reliability_time_terminated_intervals_match_known_answer():
+    result = refrigerator_reliability(2, 49_366, 720)
+    assert result["rate_interval_95"]["lower"] == pytest.approx(4.9e-6, rel=.02)
+    assert result["rate_interval_95"]["upper"] == pytest.approx(1.46e-4, rel=.01)
+    assert result["mtbf_interval_95"]["lower"] == pytest.approx(6_800, rel=.02)
+    assert result["mtbf_interval_95"]["upper"] == pytest.approx(203_800, rel=.01)
+    assert result["failure_probability_interval_95"]["lower"] == pytest.approx(.0035, abs=.0002)
+    assert result["failure_probability_interval_95"]["upper"] == pytest.approx(.10, abs=.001)
+
+
 def test_zero_failures_retains_uncertainty():
     result = refrigerator_reliability(0, 10_000, 1_000)
     assert result["rate_per_hour"] == 0
     assert result["mtbf_hours"] is None
     assert result["rate_interval_95"]["upper"] > 0
     assert result["warnings"][0]["code"] == "ZERO_FAILURES"
+    assert result["rate_interval_95"]["upper"] == pytest.approx(2.996 / 10_000)
 
 
 def test_zero_exposure_is_insufficient():
@@ -71,6 +83,51 @@ def test_no_generator_demands_is_insufficient():
 
 def test_financial_hand_check():
     assert expected_annual_blackout_loss(4, 0.10, 0.25, 20_000) == pytest.approx(2_000)
+    assert expected_inventory_loss(1 - math.exp(-(2 / 49_366) * 720), 96_000) == pytest.approx(2760, rel=.01)
+    assert .10 * 252_000 == 25_200
+    assert .30103365 * 252_000 == pytest.approx(75_860, abs=1)
+
+
+def test_control_chart_uses_moving_range_estimator_and_run_rules():
+    baseline = [reading(i * 15, 3.8 + (i % 2) * .1) for i in range(20)]
+    displayed = [reading(i * 15, 4.5 + i * .05) for i in range(8)]
+    result = analyze_temperature_process(displayed, baseline, baseline + displayed)
+    assert result["within_sigma_c"] == pytest.approx(result["moving_range_average_c"] / 1.128)
+    assert result["lower_control_limit_c"] == pytest.approx(result["center_line_c"] - 2.66 * result["moving_range_average_c"])
+    assert result["moving_range_ucl_c"] == pytest.approx(3.267 * result["moving_range_average_c"])
+    rules = {signal["rule"] for signal in result["control_signals"]}
+    assert "8 consecutive points on one side" in rules
+    assert "6 consecutive points steadily increasing or decreasing" in rules
+    assert "3-sigma control limit" in rules
+
+    decreasing = [reading(i * 15, 5.5 - i * .05) for i in range(6)]
+    decreasing_result = analyze_temperature_process(decreasing, baseline, baseline + decreasing)
+    assert any(
+        signal["rule"] == "6 consecutive points steadily increasing or decreasing"
+        for signal in decreasing_result["control_signals"]
+    )
+
+
+def test_invalid_reading_breaks_consecutive_control_chart_runs():
+    baseline = [reading(i * 15, 3.8 + (i % 2) * .1) for i in range(20)]
+    displayed = [reading(400 + i * 15, 4.2 + i * .1) for i in range(4)]
+    displayed.append(reading(460, None, valid=False))
+    displayed.extend(reading(475 + i * 15, 4.6 + i * .1) for i in range(4))
+    result = analyze_temperature_process(displayed, baseline, baseline + displayed)
+    rules = {signal["rule"] for signal in result["control_signals"]}
+    assert "8 consecutive points on one side" not in rules
+    assert "6 consecutive points steadily increasing or decreasing" not in rules
+
+
+def test_capability_requires_minimum_sample_and_excludes_invalid_values():
+    baseline = [reading(i * 15, 4 + (i % 2) * .1) for i in range(20)]
+    overall = [reading(i * 15, 6.2 if i < 2 else 4.1 + (i % 5) * .05) for i in range(20)] + [reading(400, 99, valid=False)]
+    result = analyze_temperature_process(overall, baseline, overall)
+    assert result["capability_status"] == "insufficient_data"
+    assert result["overall_count"] == 20
+    assert result["ppk"] is None
+    assert result["observed_out_of_spec_percent"] == 10
+    assert result["normal_theory_out_of_spec_percent"] is not None
 
 
 def test_exact_temperature_boundaries_are_in_range():
@@ -95,6 +152,8 @@ def test_temperature_forecast_flags_limit_crossing():
     assert result["status"] == "approaching_limit"
     assert result["predicted_minutes_to_limit"] == pytest.approx(15)
     assert result["projected_temperature_c"] == pytest.approx(7.5)
+    assert result["slope_c_per_hour"] == pytest.approx(2)
+    assert result["as_of_utc"] == rows[-1]["timestamp"].isoformat()
 
 
 def test_temperature_forecast_requires_fresh_sufficient_data():
@@ -121,6 +180,8 @@ def test_no_breach_before_recovery_is_censored():
     )
     assert result["unbreached_censored_count"] == 1
     assert result["mean_observed_hours_to_breach_breached_only"] is None
+    assert result["incidents"][0]["stayed_in_range_at_least_minutes"] == pytest.approx(30)
+    assert result["censored_minimum_minutes"] == pytest.approx(30)
 
 
 def test_initial_breach_is_zero_with_warning():

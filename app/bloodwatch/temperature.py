@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime
-from math import sqrt
+from math import erf, sqrt
 from statistics import mean, stdev
 from typing import Any
+from scipy.stats import shapiro
 
 from .common import warning
+
+MIN_CAPABILITY_N = 100
 
 
 def analyze_temperature_process(
@@ -15,10 +18,11 @@ def analyze_temperature_process(
     lower_limit_c: float = 1.0,
     upper_limit_c: float = 6.0,
 ) -> dict[str, Any]:
-    displayed = sorted(
-        (row for row in displayed_rows if row["reading_valid"] and row["temperature_c"] is not None),
-        key=lambda row: row["timestamp"],
-    )
+    displayed_sequence = sorted(displayed_rows, key=lambda row: row["timestamp"])
+    displayed = [
+        row for row in displayed_sequence
+        if row["reading_valid"] and row["temperature_c"] is not None
+    ]
     baseline = sorted(
         (row for row in baseline_rows if row["reading_valid"] and row["temperature_c"] is not None),
         key=lambda row: row["timestamp"],
@@ -39,6 +43,17 @@ def analyze_temperature_process(
         "lower_control_limit_c": None,
         "upper_control_limit_c": None,
         "out_of_control_count": None,
+        "moving_range_average_c": None,
+        "moving_range_ucl_c": None,
+        "moving_range_series": [],
+        "control_signals": [],
+        "observed_out_of_spec_percent": (
+            100 * sum(value < lower_limit_c or value > upper_limit_c for value in overall_values) / len(overall_values)
+            if overall_values else None
+        ),
+        "normal_theory_out_of_spec_percent": None,
+        "normality_p_value": None,
+        "normality_sample_count": min(len(overall_values), 5000),
         "within_sigma_c": None,
         "cp": None,
         "cpk": None,
@@ -53,8 +68,9 @@ def analyze_temperature_process(
     moving_ranges = [abs(current - previous) for previous, current in zip(baseline_values, baseline_values[1:])]
     within_sigma = mean(moving_ranges) / 1.128
     center = mean(baseline_values)
-    lower_control = center - 3 * within_sigma
-    upper_control = center + 3 * within_sigma
+    mrbar = mean(moving_ranges)
+    lower_control = center - 2.66 * mrbar
+    upper_control = center + 2.66 * mrbar
     overall_sigma = stdev(overall_values) if len(overall_values) > 1 else None
     result.update(
         {
@@ -63,15 +79,42 @@ def analyze_temperature_process(
             "upper_control_limit_c": upper_control,
             "out_of_control_count": sum(value < lower_control or value > upper_control for value in displayed_values),
             "within_sigma_c": within_sigma,
+            "moving_range_average_c": mrbar,
+            "moving_range_ucl_c": 3.267 * mrbar,
+            "moving_range_series": [
+                {"timestamp_utc": baseline[index + 1]["timestamp"].isoformat(), "moving_range_c": value}
+                for index, value in enumerate(moving_ranges)
+            ],
         }
     )
+    signals = []
+    sequence_values = [
+        row["temperature_c"] if row["reading_valid"] and row["temperature_c"] is not None else None
+        for row in displayed_sequence
+    ]
+    for index, value in enumerate(sequence_values):
+        if value is not None and (value < lower_control or value > upper_control):
+            signals.append({"index": index, "value_c": value, "rule": "3-sigma control limit"})
+    for end in range(7, len(sequence_values)):
+        window = sequence_values[end - 7:end + 1]
+        if any(value is None for value in window):
+            continue
+        if all(value > center for value in window) or all(value < center for value in window):
+            signals.append({"index": end, "value_c": sequence_values[end], "rule": "8 consecutive points on one side"})
+    for end in range(5, len(sequence_values)):
+        window = sequence_values[end - 5:end + 1]
+        if any(value is None for value in window):
+            continue
+        if all(a < b for a, b in zip(window, window[1:])) or all(a > b for a, b in zip(window, window[1:])):
+            signals.append({"index": end, "value_c": sequence_values[end], "rule": "6 consecutive points steadily increasing or decreasing"})
+    result["control_signals"] = signals
     if within_sigma > 0:
         result["cp"] = (upper_limit_c - lower_limit_c) / (6 * within_sigma)
         result["cpk"] = min(
             (upper_limit_c - center) / (3 * within_sigma),
             (center - lower_limit_c) / (3 * within_sigma),
         )
-        result["capability_status"] = "estimated"
+        result["capability_status"] = "estimated" if len(overall_values) >= MIN_CAPABILITY_N else "insufficient_data"
         result["capability_explanation"] = "Cp/Cpk use the fixed normal baseline; Pp/Ppk use the complete operational temperature history."
     else:
         result["capability_explanation"] = "Capability is unsupported because the baseline has no measurable variation."
@@ -82,12 +125,23 @@ def analyze_temperature_process(
             (upper_limit_c - overall_mean) / (3 * overall_sigma),
             (overall_mean - lower_limit_c) / (3 * overall_sigma),
         )
+        overall_mean = mean(overall_values)
+        cdf = lambda x: 0.5 * (1 + erf((x - overall_mean) / (overall_sigma * sqrt(2))))
+        result["normal_theory_out_of_spec_percent"] = 100 * (cdf(lower_limit_c) + 1 - cdf(upper_limit_c))
+        if len(overall_values) >= 3:
+            sample = overall_values[:5000]
+            result["normality_p_value"] = float(shapiro(sample).pvalue)
     elif len(overall_values) < 2:
-        result["capability_status"] = "unsupported"
-        result["capability_explanation"] = "Pp/Ppk require at least two valid overall observations."
+        result["capability_status"] = "insufficient_data"
+        result["capability_explanation"] = f"Not enough data for a reliable capability estimate (minimum {MIN_CAPABILITY_N} readings)."
     else:
         result["capability_status"] = "unsupported"
         result["capability_explanation"] = "Pp/Ppk are unsupported because the overall history has no measurable variation."
+    if len(overall_values) < MIN_CAPABILITY_N:
+        result["capability_status"] = "insufficient_data"
+        result["capability_explanation"] = f"Not enough data for a reliable capability estimate (minimum {MIN_CAPABILITY_N} readings)."
+        result["pp"] = None
+        result["ppk"] = None
     return result
 
 
@@ -168,8 +222,11 @@ def forecast_temperature_limit_crossing(
         "slope_c_per_hour": None,
         "predicted_minutes_to_limit": None,
         "projected_temperature_c": None,
+        "as_of_utc": None,
         "warnings": [],
     }
+    if valid:
+        result["as_of_utc"] = valid[-1]["timestamp"].isoformat()
     if len(valid) < minimum_readings:
         result["warnings"].append(warning("FORECAST_INSUFFICIENT_READINGS", "Not enough recent valid readings to estimate a temperature trend.", "info"))
         return result

@@ -15,6 +15,7 @@ def summarize_breach_and_recovery(
     per_incident = []
     breached_times = []
     recovery_hours = []
+    censored_minutes = []
     warnings = []
 
     for incident in incidents:
@@ -46,6 +47,7 @@ def summarize_breach_and_recovery(
         elif readings:
             elapsed = (end - incident["cooling_loss"]).total_seconds() / 3600
             status = "unbreached_censored"
+            censored_minutes.append(elapsed * 60)
         else:
             elapsed = None
             status = "unknown"
@@ -67,6 +69,7 @@ def summarize_breach_and_recovery(
                 "breach_status": status,
                 "observed_hours_to_breach_or_censoring": elapsed,
                 "recovery_hours": recovery,
+                "stayed_in_range_at_least_minutes": elapsed * 60 if status == "unbreached_censored" else None,
             }
         )
 
@@ -76,6 +79,10 @@ def summarize_breach_and_recovery(
         "unbreached_censored_count": sum(row["breach_status"] == "unbreached_censored" for row in per_incident),
         "unknown_count": sum(row["breach_status"] == "unknown" for row in per_incident),
         "mean_observed_hours_to_breach_breached_only": mean(breached_times) if breached_times else None,
+        "minimum_observed_hours_to_breach": min(breached_times) if breached_times else None,
+        "maximum_observed_hours_to_breach": max(breached_times) if breached_times else None,
+        "small_sample_n": len(breached_times),
+        "censored_minimum_minutes": min(censored_minutes) if censored_minutes else None,
         "completed_recovery_count": len(recovery_hours),
         "mean_recovery_hours": mean(recovery_hours) if recovery_hours else None,
         "median_recovery_hours": median(recovery_hours) if recovery_hours else None,

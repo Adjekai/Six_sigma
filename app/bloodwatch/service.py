@@ -4,6 +4,8 @@ from datetime import timedelta
 from typing import Any
 
 from .incidents import summarize_breach_and_recovery
+from .financial import expected_inventory_loss
+from .live_data import rejected_reading_summary
 from .reliability import generator_reliability, refrigerator_reliability
 from .repository import load_data
 from .scenarios import SCENARIOS, load_scenario_data
@@ -94,6 +96,7 @@ def build_dashboard(
 
     equipment_status = []
     risk_forecasts = []
+    process_by_refrigerator: dict[str, dict[str, Any]] = {}
     selected_summary = None
     for refrigerator in equipment:
         rows = [row for row in window_temperatures if row["refrigerator_id"] == refrigerator["equipment_id"]]
@@ -105,6 +108,23 @@ def build_dashboard(
         ]
         forecast = forecast_temperature_limit_crossing(
             recent_rows, reference, lower_limit_c, upper_limit_c
+        )
+        baseline_period = next(
+            row for row in data["refrigerator_periods"]
+            if row["refrigerator_id"] == refrigerator["equipment_id"] and row["normal_baseline"]
+        )
+        baseline_rows_for_unit = [
+            row for row in data["baseline_temperatures"]
+            if row["refrigerator_id"] == refrigerator["equipment_id"]
+            and baseline_period["period_start"] <= row["timestamp"] < baseline_period["period_end"]
+        ]
+        overall_rows_for_unit = [
+            row for row in temperatures
+            if row["refrigerator_id"] == refrigerator["equipment_id"]
+            and row["timestamp"] >= baseline_period["period_end"]
+        ]
+        process_by_refrigerator[refrigerator["equipment_id"]] = analyze_temperature_process(
+            rows, baseline_rows_for_unit, overall_rows_for_unit, lower_limit_c, upper_limit_c
         )
         inventory_value = (
             refrigerator["current_bags"] * refrigerator["value_per_bag_usd"]
@@ -118,6 +138,9 @@ def build_dashboard(
             "slope_c_per_hour": forecast["slope_c_per_hour"],
             "predicted_minutes_to_limit": forecast["predicted_minutes_to_limit"],
             "projected_temperature_c": forecast["projected_temperature_c"],
+            "as_of_utc": forecast["as_of_utc"],
+            "method": "Linear fit on recent valid readings (2-hour window)",
+            "control_signals": process_by_refrigerator[refrigerator["equipment_id"]]["control_signals"],
             "current_temperature_c": summary["latest_temperature_c"],
             "inventory_bags": refrigerator["current_bags"],
             "inventory_value_usd": inventory_value,
@@ -190,6 +213,35 @@ def build_dashboard(
         generator_results.append(result)
         all_warnings.extend(result["warnings"])
 
+    group_failure_probability = {row["model_group"]: row["failure_probability"] for row in refrigerator_results}
+    for forecast in risk_forecasts:
+        equipment_row = next(row for row in equipment if row["equipment_id"] == forecast["refrigerator_id"])
+        f30 = group_failure_probability.get(equipment_row["model_group"])
+        signals = forecast["control_signals"]
+        latest = forecast["current_temperature_c"]
+        out_of_range = latest is not None and (latest < lower_limit_c or latest > upper_limit_c)
+        if out_of_range:
+            banner = "At risk"
+            reason = "Latest reading is outside the configured range"
+        elif forecast["status"] == "approaching_limit":
+            banner = "Watch"
+            reason = "Linear estimate projects a limit crossing within 60 minutes"
+        elif signals:
+            banner = "Watch"
+            reason = f"Control-chart signal: {signals[-1]['rule']}"
+        elif f30 is not None and f30 >= 0.10:
+            banner = "Watch"
+            reason = f"Pooled constant-rate F(30 d) estimate is {f30:.1%}"
+        elif latest is None or forecast["status"] in {"unknown", "insufficient_data"}:
+            banner = "Watch"
+            reason = "Latest condition or trend is not known"
+        else:
+            banner = "In range"
+            reason = f"Latest reading is within range; pooled F(30 d) estimate {f30:.1%}" if f30 is not None else "Latest reading is within range"
+        forecast["decision_support_status"] = banner
+        forecast["decision_support_reason"] = reason
+        forecast["failure_probability_30d"] = f30
+
     breach_recovery = summarize_breach_and_recovery(incidents, temperatures, lower_limit_c, upper_limit_c)
     all_warnings.extend(breach_recovery["warnings"])
     selected_incidents = [row for row in incidents if row["refrigerator_id"] == refrigerator_id]
@@ -201,7 +253,7 @@ def build_dashboard(
         if row["refrigerator_id"] == refrigerator_id and row["normal_baseline"]
     )
     baseline_rows = [
-        row for row in temperatures
+        row for row in data["baseline_temperatures"]
         if row["refrigerator_id"] == refrigerator_id
         and baseline_period["period_start"] <= row["timestamp"] < baseline_period["period_end"]
     ]
@@ -212,6 +264,7 @@ def build_dashboard(
     process_analysis = analyze_temperature_process(
         selected_rows, baseline_rows, overall_rows, lower_limit_c, upper_limit_c
     )
+    process_analysis["autocorrelation_note"] = "Readings are autocorrelated; normal-theory capability estimates are descriptive."
     process_analysis.update(
         {
             "baseline_start_utc": baseline_period["period_start"].isoformat(),
@@ -246,6 +299,7 @@ def build_dashboard(
             "synthetic": True,
             "live_reading_count": data["live_reading_count"],
             "reference_time_utc": reference.isoformat(),
+            "rejected_readings": rejected_reading_summary(),
         },
         "selection": {
             "refrigerator_id": refrigerator_id,
@@ -279,6 +333,24 @@ def build_dashboard(
                 row for row in generator_results if row["generator_id"] == selected_equipment["generator_id"]
             ),
             "selected_breach_recovery": selected_breach,
+        },
+        "financial_estimates": {
+            "refrigerators": [
+                {
+                    "refrigerator_id": row["equipment_id"],
+                    "expected_loss_30d_usd": expected_inventory_loss(
+                        next((item["failure_probability"] for item in refrigerator_results if item["model_group"] == row["model_group"]), None),
+                        row["current_bags"] * row["value_per_bag_usd"] if row["value_per_bag_usd"] is not None else None,
+                    ),
+                }
+                for row in equipment
+            ],
+            "generator_expected_loss_per_blackout_usd": (
+                generator_results[0]["failed_start_probability"] * 252000 if generator_results and generator_results[0]["failed_start_probability"] is not None else None
+            ),
+            "generator_wilson_upper_case_usd": (
+                generator_results[0]["wilson_interval_95"]["upper"] * 252000 if generator_results and generator_results[0]["wilson_interval_95"]["upper"] is not None else None
+            ),
         },
         "warnings": all_warnings,
     }
