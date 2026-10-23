@@ -53,60 +53,25 @@ The dashboard opens in **Live data** mode. It uses the three CSV datasets and ov
 
 The Data mode selector also offers three reproducible synthetic scenarios: Stable conditions, Degrading refrigerator, and Blackout with failed generator. These scenarios are generated from the same three CSV datasets and are clearly labeled synthetic. They do not use or overwrite live SQLite readings. Return to **Live data** to see the sensor feed.
 
-## Overview
+## Baseline datasets
 
-Each folder under `data/scenarios/` contains five CSV files and `metadata.json`. Every scenario has three refrigerators and one shared backup generator.
+The dashboard reads these three CSV files from `data/`. They provide sample history and equipment context; Live mode can add incoming sensor readings without changing the CSVs.
 
-| Scenario | Current inventory | Purpose |
-|---|---:|---|
-| `normal` | 1,050 bags | Temperatures stay within range; all recorded generator starts succeed |
-| `refrigerator_breakdown` | 1,100 bags | A mechanical cooling failure produces an out-of-range temperature |
-| `blackout_failed_backup` | 1,000 bags | One current blackout and failed generator start affect three refrigerators |
-
-Dataset rules:
-
-- All timestamps are UTC.
-- Blank means unknown or not applicable; zero is an observed zero.
-- IDs join records across files.
-- One blackout is one generator demand even when it affects three refrigerators.
-- The 1–6 °C range is a storage requirement, not a biological spoilage threshold.
-
-### `metadata.json`
-
-Scenario context generated from `scripts/generate_scenarios.py`. In real collection, this would come from study documentation and analysis configuration.
-
-| Variable | Meaning |
+| File | What it contains |
 |---|---|
-| `id` | Scenario key |
-| `name` | Scenario display name |
-| `description` | Scenario summary |
-| `synthetic` | Confirms the records are simulated |
-| `reference_time_utc` | End of the observation window |
-| `seed` | Reproducible random seed |
-| `generation_assumptions` | Modeling limitations |
-| `planted_truth` | Events intentionally included for verification |
+| `blood_temperature.csv` | Timestamped temperature readings for each refrigerator, plus validity and related-event fields |
+| `refrigerator_failures.csv` | Refrigerator operating periods, mechanical failures, baseline periods, and current inventory snapshots |
+| `generator_failures.csv` | Blackout demands and backup-generator start outcomes |
 
-### `inventory_outcomes.csv`
+All timestamps are UTC. Blank fields mean unknown or not applicable; zero is an observed zero. IDs connect records across files. One generator start is one demand even when its failure affects several refrigerators. The 1–6 °C range is the default storage specification used by the demo, not a biological spoilage threshold.
 
-Current inventory and historical incident outcomes. Real sources would be inventory, incident-review, and finance systems.
-
-| Variable | Meaning |
-|---|---|
-| `record_type` | `current_snapshot` or `incident_outcome` |
-| `as_of_utc` | Time represented by the row |
-| `incident_id` | Related incident; blank for current inventory |
-| `lot_id` | Blood lot identifier used to prevent double counting |
-| `refrigerator_id` | Refrigerator holding the inventory |
-| `bags_present` | Bags stored or involved |
-| `value_per_bag_usd` | Assumed value per bag; blank if unknown |
-| `bags_transferred` | Bags moved after an incident; blank if unknown or not applicable |
-| `bags_written_off` | Bags confirmed written off; blank if unknown or not applicable |
+The scenario selector creates three reproducible synthetic demonstrations from these same files. It does not require separate scenario folders or replace Live sensor readings.
 
 ## 1. Temperature
 
 The dashboard shows the latest temperature, mean, range, sample standard deviation, and selected history for one refrigerator. The file contains the normal baseline, the latest 24-hour history, and a short 15-minute reading sequence through every older cooling interruption.
 
-### `temperatures.csv`
+### `blood_temperature.csv`
 
 Fifteen-minute readings. Real data would come from calibrated temperature loggers and the monitoring-quality system.
 
@@ -123,7 +88,7 @@ Invalid readings are not replaced with zero. Readings exactly at 1 °C or 6 °C 
 
 The dashboard measures from cooling loss to the first valid reading strictly outside 1–6 °C.
 
-### `cooling_incidents.csv`
+Cooling-loss timing comes from failure records in `refrigerator_failures.csv` and `generator_failures.csv`; there is no separate cooling-incidents CSV.
 
 One row per cooling-loss incident per refrigerator. Real data would combine alarm, maintenance, power-event, and root-cause records.
 
@@ -143,7 +108,7 @@ The result is an observed storage-limit crossing, not a spoilage time. Cooling r
 
 The dashboard separates refrigerator mechanical failures from backup-generator start failures.
 
-### `equipment_exposure.csv`
+### `refrigerator_failures.csv`
 
 Equipment identity and operating exposure. Real sources would be the asset register, maintenance system, and runtime meter.
 
@@ -158,7 +123,7 @@ Equipment identity and operating exposure. Real sources would be the asset regis
 | `observation_end_utc` | Exposure-period end |
 | `mechanical_operating_hours` | Mechanical-failure exposure denominator |
 
-### `blackout_demands.csv`
+### `generator_failures.csv`
 
 One row per blackout demand on the backup generator. Real sources would be utility, transfer-switch, and generator-controller logs.
 
