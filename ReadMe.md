@@ -14,22 +14,23 @@ The dashboard is a decision-support demonstration. It flags readings or trends f
 
 ### What the tool shows
 
-- **Supply overview:** bag and lot counts, estimated inventory value, refrigerator status, and a per-unit warning table.
+- **Supply overview:** bag and lot counts, estimated inventory value, refrigerator status, and a per-unit warning table with one consistent status, explanation, and warning count.
 - **Temperature history:** latest, average, minimum, and maximum valid readings for the selected refrigerator, plotted against configurable temperature limits.
 - **Cooling interruptions:** time from recorded cooling loss to the first valid out-of-range reading, plus time to recorded cooling restoration. A temperature-limit crossing is not a biological spoilage time.
 - **Reliability estimates:** pooled refrigerator mechanical-failure estimates from failure counts and operating-hour exposure; generator failed-start estimates from known blackout outcomes.
 - **Scenario demonstrations:** stable conditions, a planted refrigerator cooling failure, and a failed generator start during a blackout.
+- **Fast warning demonstration:** an optional simulated feed cycles through warming, a projected crossing, an observed breach, and recovery so the warning interface can be reviewed quickly.
 
 ### Data modes
 
 | Mode | Data used | Intended use |
 |---|---|---|
-| Live data | The three baseline CSV files plus valid readings stored in SQLite | Demonstrate the incoming-reading path. With no sensor connected, the dashboard shows CSV history only. |
+| CSV history + incoming readings | The three baseline CSV files plus valid readings stored in local SQLite | The standard `run` command automatically supplies synthetic readings. A connected sensor can use the same API. |
 | Stable conditions | Rebuilt synthetic readings and event history | Show a no-alarm example. |
 | Degrading refrigerator | Synthetic replay with a planted failure on R1 | Show a refrigerator cooling-loss response. |
 | Blackout with failed generator | Synthetic replay of one failed start affecting the refrigerators connected to G1 | Show a shared-power event. |
 
-The bundled temperature producer is a simulator, not a hardware sensor. All baseline files and scenario events are synthetic educational data.
+The bundled temperature producer is a simulator, not a hardware sensor. The normal `run` command starts it automatically near 4 °C; the optional `run-warning-demo` cycles through normal, warming, projected crossing, actual breach, and recovery. All baseline files, generated readings, and scenario events are synthetic educational data.
 
 ### Quick start
 
@@ -104,7 +105,7 @@ Function and endpoint notes use small labels to make their purpose and configura
 | File | Purpose |
 |---|---|
 | `app/frontend/index.html` | HTML shell, page title/description, and links to the frontend assets. |
-| `app/frontend/app.js` | Fetches dashboard JSON, tracks selected controls, renders the summary, charts, scenario banner, and expandable sections, and refreshes the dashboard. |
+| `app/frontend/app.js` | Fetches dashboard JSON, tracks selected controls, renders the summary, warning table, charts, scenario banner, and expandable sections, and refreshes the dashboard every three seconds. |
 | `app/frontend/src/styles.css` | Responsive layout, colors, typography, tables, charts, banners, and expandable-section styling. |
 | `app/frontend/favicon.ico` | Browser-tab icon. |
 
@@ -112,7 +113,7 @@ Function and endpoint notes use small labels to make their purpose and configura
 
 | File | Purpose |
 |---|---|
-| `scripts/project.py` | Cross-platform `doctor`, `setup`, `test`, `run`, and `data` command-line helper. |
+| `scripts/project.py` | Cross-platform `doctor`, `setup`, `test`, `run`, `run-warning-demo`, and `data` command-line helper. Both run commands start the dashboard and a simulated feed; the warning demo uses a fast staged feed. |
 | `scripts/generate_scenarios.py` | Deterministically generates the three related synthetic baseline CSV files in `data/`. Despite its historical filename, it writes the baseline files, not separate scenario folders. |
 | `scripts/stream_temperature.py` | Generates and posts simulated temperature readings to the API. The standard `project.py run` command starts it automatically. |
 | `tests/test_api.py` | API routes, frontend delivery, parameter validation, live-reading ingestion, and scenario response checks. |
@@ -216,7 +217,7 @@ The browser page refreshes its dashboard data every three seconds. Its current c
 
 | Control | Effect |
 |---|---|
-| Data view | Selects live CSV-plus-SQLite data or one of the synthetic scenarios. |
+| Data view | Selects CSV history plus incoming SQLite readings, or one of the synthetic scenario replays. |
 | Refrigerator to inspect | Changes the unit used for the detailed temperature chart and cooling-interruption summary. |
 | Temperature history | Selects the recent chart window. The browser offers 6 or 24 hours. |
 | Analysis settings | Changes lower/upper temperature status limits and the historical refrigerator failure estimate period. These settings do not modify readings. |
@@ -230,6 +231,8 @@ The refrigerator warning table applies one priority order to its label, explanat
 5. Otherwise the result is **Within limits**. When trend history is insufficient, the explanation says so instead of claiming that a forecast succeeded.
 
 The projection uses valid readings from the preceding two hours. Incoming-feed freshness is measured against actual current UTC time; historical scenarios use their replay reference time. A control-chart warning clears when the newest valid reading no longer completes any defined rule; older signals remain available in the statistical results but do not keep the current warning active. Historical equipment-failure probability stays in the reliability section and does not trigger a temperature warning. Inventory in the warning table is recorded stock exposure, not confirmed product loss.
+
+The optional `run-warning-demo` profile replaces only rows from the bundled simulator sources and rotates the first refrigerator through Normal, Warming, Projected crossing, Actual breach, and Recovery. Each stage lasts six seconds; the other refrigerators remain stable. The dashboard refreshes every three seconds. This is a fast synthetic demonstration, not a sensor feed or a prediction of equipment failure.
 
 #### HTTP routes
 
@@ -283,9 +286,9 @@ This is a practical reference to the callable functions and routes. Private help
 | `setup()` | No arguments. | Creates `.venv` if needed, installs `app/requirements-dev.txt`, then regenerates the three CSVs. |
 | `require_setup()` | No arguments. | Ensures the project virtual environment exists; otherwise raises `ProjectError`. |
 | `test()` | No arguments. | Runs `pytest -q` with `app/` on `PYTHONPATH`. |
-| `serve()` | No arguments. | Runs Uvicorn at `127.0.0.1:8000`. |
+| `serve(simulator_profile="normal")` | Optional `normal` or `warning-cycle` profile. | Starts Uvicorn, waits for `/health`, then starts the matching simulated feed; Ctrl+C stops both processes. |
 | `generate_data()` | No arguments. | Runs `scripts/generate_scenarios.py` using the project environment. |
-| `main()` | CLI action: `doctor`, `setup`, `test`, `run`, or `data`. | Dispatches the action and returns a process exit code. |
+| `main()` | CLI action: `doctor`, `setup`, `test`, `run`, `run-warning-demo`, or `data`. | Dispatches the action and returns a process exit code. |
 
 `ProjectError` is the helper's user-facing error type. Run the script as `python scripts/project.py ACTION`.
 

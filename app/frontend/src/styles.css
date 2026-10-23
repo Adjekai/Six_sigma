@@ -366,3 +366,16 @@ footer strong { color:#52665e; }
 	.welcome-note { flex-direction:column; gap:8px; }
 	.welcome-note details { flex-basis:auto; }
 }
+
+/* Keep long warning and data-source copy inside its own layout column. */
+.welcome-note > div { flex: 1 1 0; min-width: 0; }
+.welcome-note > .data-source-information { flex: 0 1 40%; min-width: 0; max-width: 420px; overflow-wrap: anywhere; }
+.data-source-information summary, .risk-info summary { max-width: 100%; overflow-wrap: anywhere; }
+.risk-watch > :first-child, .risk-watch td { min-width: 0; }
+.risk-watch td { overflow-wrap: anywhere; }
+.risk-row-info p { min-width: 0; overflow-wrap: anywhere; line-height: 1.45; }
+.risk-signal { max-width: 100%; white-space: normal; overflow-wrap: anywhere; vertical-align: top; }
+@media (max-width: 760px) {
+	.welcome-note { align-items: stretch; }
+	.welcome-note > .data-source-information { flex: 1 1 auto; max-width: none; margin-top: 4px; padding: 8px 0 0; border-top: 1px solid #d6e4db; border-left: 0; }
+}
