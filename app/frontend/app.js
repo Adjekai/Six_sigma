@@ -18,7 +18,7 @@ const refrigeratorCode = id => {
   return number ? `R${number}` : String(id ?? '');
 };
 const card = (label, value, note) => `<article class="metric-card"><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`;
-const sectionTitle = (n, title) => `<div class="question"><span class="question-number">${n}</span><h2>${title}</h2></div>`;
+const sectionTitle = title => `<div class="analysis-subheading"><h3>${title}</h3></div>`;
 
 async function getJson(url) {
   const response = await fetch(url);
@@ -71,10 +71,10 @@ function overview(data) {
   const series=data.conditions.temperature_series.map(row=>({x:Date.parse(row.timestamp_utc),y:row.reading_valid?row.temperature_c:null})).sort((a,b)=>a.x-b.x);
   const visibleIncidents=detailed.filter(row=>Date.parse(row.cooling_loss_utc)>=series[0]?.x && Date.parse(row.cooling_loss_utc)<=series.at(-1)?.x);
   const coolingMarkers=visibleIncidents.map(row=>({x:Date.parse(row.cooling_loss_utc),label:row.cause==='mechanical'?`${row.incident_id}: refrigerator failure`:`${row.incident_id}: generator start failure`}));
-  const status=s.state==='within_limits'?'Within range':s.state==='unknown'?'Reading unavailable':'Review required';
+  const status=s.state==='within_limits'?'Within selected limits':s.state==='unknown'?'Reading unavailable':'Review required';
   const rows=detailed.map(row=>`<tr><td><strong>${row.cause==='mechanical'?'Refrigerator mechanical failure':'Backup generator failed to start'}</strong><br><small>Event ${esc(row.incident_id)}</small></td><td>${row.breach_status==='breached'?minutes(row.observed_hours_to_breach_or_censoring):row.breach_status==='unknown'?'No matching temperature readings':'No reading outside 1–6 °C before recovery'}</td><td>${minutes(row.recovery_hours)}</td></tr>`).join('');
   const zeroFailures=fridge.failures===0;
-  const missingBreachValue='No out-of-range reading';
+  const missingBreachValue='No limit crossing observed';
   const missingBreachNote='No observed out-of-range time';
   const within=equipment.filter(row=>row.status==='within_limits').length;
   const review=equipment.filter(row=>row.status==='review_required').length;
@@ -82,66 +82,66 @@ function overview(data) {
   const fullestInventory=Math.max(...inventory.by_refrigerator.map(row=>row.bags_present),1);
   const inventoryRows=inventory.by_refrigerator.map(row=>`<tr><td><strong>${esc(refrigeratorName(row.refrigerator_id))}</strong><br><small>${esc(refrigeratorCode(row.refrigerator_id))}</small></td><td><div class="blood-level" title="${num(row.bags_present,0)} bags; relative to the fullest refrigerator"><span class="blood-level-fill" style="width:${row.bags_present/fullestInventory*100}%"></span><strong>${num(row.bags_present,0)} bags</strong></div></td><td>${row.lot_count}</td><td>${usd(row.inventory_value_usd)}</td></tr>`).join('');
   const riskRows=riskForecasts.map(row=>{
-    const signal=row.status==='approaching_limit'?`Limit in ${minutes(row.predicted_minutes_to_limit/60)}`:row.status==='currently_out_of_range'?'Out of range':row.status==='within_limits'?'No warning':row.status==='insufficient_data'?'Limited data':'No recent reading';
+    const signal=row.status==='approaching_limit'?`Limit may be reached in ${minutes(row.predicted_minutes_to_limit/60)}`:row.status==='currently_out_of_range'?'Currently outside limits':row.status==='within_limits'?'No crossing projected':row.status==='insufficient_data'?'Need more readings':'Readings are stale';
     const current=row.current_temperature_c==null?'Unknown':`${num(row.current_temperature_c)} °C`;
     const projected=row.projected_temperature_c==null?'Unavailable':`${num(row.projected_temperature_c)} °C`;
     const slope=row.slope_c_per_hour==null?'unavailable':`${num(row.slope_c_per_hour,3)} C/h`;
-    return `<tr><td data-label="Unit"><strong>${esc(refrigeratorName(row.refrigerator_id))}</strong></td><td data-label="Status"><span class="risk-signal risk-signal--${esc(row.status)}">${esc(signal)}</span><details id="risk-row-${esc(row.refrigerator_id)}" class="risk-row-info"><summary>Details</summary><p>${esc(row.decision_support_reason)}</p><p>Linear fit: ${num(row.reading_count,0)} readings · ${slope}${row.as_of_utc?` · ${esc(fullTimestamp(row.as_of_utc))}`:''}</p></details></td><td data-label="Temperature">${current} → ${projected}</td><td data-label="Inventory">${usd(row.inventory_value_usd)} · ${num(row.inventory_bags,0)} bags</td></tr>`;
+    return `<tr><td data-label="Refrigerator"><strong>${esc(refrigeratorName(row.refrigerator_id))}</strong></td><td data-label="Status"><span class="risk-signal risk-signal--${esc(row.status)}">${esc(signal)}</span><details id="risk-row-${esc(row.refrigerator_id)}" class="risk-row-info"><summary>Why this status?</summary><p>${esc(row.decision_support_reason)}</p><p>Trend estimate uses ${num(row.reading_count,0)} readings · ${slope}${row.as_of_utc?` · ${esc(fullTimestamp(row.as_of_utc))}`:''}</p></details></td><td data-label="Temperature now → projected">${current} → ${projected}</td><td data-label="Inventory at this unit">${usd(row.inventory_value_usd)} · ${num(row.inventory_bags,0)} bags</td></tr>`;
   }).join('');
   const flaggedForecasts=riskForecasts.filter(row=>['approaching_limit','currently_out_of_range'].includes(row.status)).length;
   const generatorRisk=data.reliability.selected_generator;
   const generatorRiskText=generatorRisk.failed_start_probability==null?'Not enough known blackout demands':`${pct(generatorRisk.failed_start_probability)} estimated per blackout`;
   const generatorInterval=generatorRisk.wilson_interval_95.lower==null?'uncertainty unavailable':`95% interval ${pct(generatorRisk.wilson_interval_95.lower)}–${pct(generatorRisk.wilson_interval_95.upper)}`;
   const overviewPanel=`<section class="ops-summary" aria-label="Supply status">
-    <div class="summary-heading"><div><p class="eyebrow">Regional blood storage</p><h2>Supply status</h2></div><span class="live-indicator"><i></i>${num(data.dataset.live_reading_count,0)} live readings · updates every 15 s</span></div>
+    <div class="summary-heading"><div><p class="eyebrow">Regional blood storage</p><h2>Blood supply overview</h2></div><span class="live-indicator"><i></i>${num(data.dataset.live_reading_count,0)} incoming readings · refreshes every 15 s</span></div>
     <div class="summary-strip">
       <div><span>Inventory</span><strong>${num(inventory.bags_present,0)} bags</strong><small>${inventory.lot_count} lots · ${usd(inventory.inventory_value_usd)}</small></div>
       <div><span>Refrigerators</span><strong>${within} / ${equipment.length} in range</strong><small>${review} review · ${unknown} unknown</small></div>
       <div><span>Selected unit</span><strong>${num(s.latest_temperature_c)} °C</strong><small>${esc(status)} · ${s.latest_timestamp_utc?fullTimestamp(s.latest_timestamp_utc):'No recent reading'}</small></div>
-      <div><span>30-day failure estimate</span><strong>${pct(fridge.failure_probability)}</strong><small>Expected inventory loss ${usd(selectedExpectedLoss)}</small></div>
+      <div><span>Estimated refrigerator failure risk</span><strong>${pct(fridge.failure_probability)}</strong><small>Next ${state.horizonDays} operating days · modeled inventory exposure ${usd(selectedExpectedLoss)}</small></div>
     </div>
-    <div class="risk-watch"><div><h3>Risk watch</h3><strong class="warning-count">${flaggedForecasts} warning${flaggedForecasts===1?'':'s'}</strong><details id="risk-watch-info" class="risk-info"><summary>About alerts</summary><p>Each alert checks the final reading against the selected limits and projects 60 minutes using the preceding two-hour trend.</p></details></div><div class="table-wrap"><table><thead><tr><th>Unit</th><th>Status</th><th>Temperature</th><th>Inventory</th></tr></thead><tbody>${riskRows}</tbody></table></div></div>
-    <p class="generator-summary">Synthetic educational decision support only. It does not determine product safety or disposition.</p>
-    <details id="inventory-details" class="secondary-details"><summary>Inventory by refrigerator</summary><div class="table-wrap"><table><thead><tr><th>Refrigerator</th><th>Relative stock</th><th>Lots</th><th>Value</th></tr></thead><tbody>${inventoryRows}</tbody></table></div></details>
+    <div class="risk-watch"><div><h3>Refrigerator warnings</h3><strong class="warning-count">${flaggedForecasts} warning${flaggedForecasts===1?'':'s'}</strong><details id="risk-watch-info" class="risk-info"><summary>How warnings are calculated</summary><p>Current readings are checked against your selected limits. The one-hour projection extends the recent two-hour trend; it is an estimate, not a confirmed equipment failure.</p></details></div><div class="table-wrap"><table><thead><tr><th>Unit</th><th>Status / details</th><th>Temperature now → projected</th><th>Inventory at this unit</th></tr></thead><tbody>${riskRows}</tbody></table></div></div>
+    <p class="generator-summary">${state.mode==='live'?'Live readings are combined with sample CSV equipment and failure history. Estimates do not determine product safety or disposition.':'Synthetic demo data for learning; results do not determine product safety or disposition.'}</p>
+    <details id="inventory-details" class="secondary-details"><summary>View inventory for each refrigerator</summary><div class="table-wrap"><table><thead><tr><th>Refrigerator</th><th>Relative stock</th><th>Lots</th><th>Value</th></tr></thead><tbody>${inventoryRows}</tbody></table></div></details>
   </section>`;
   const sections=`<section class="panel temperature-panel"><div class="temperature-heading"><div><p class="eyebrow">Selected refrigerator</p><h2>${esc(refrigeratorName(state.refrigeratorId||data.selection.refrigerator_id))}</h2></div><span class="condition-tag condition-tag--${esc(s.state)}">${esc(status)}</span></div>
     <div class="metric-grid three">
       ${card('Latest',s.latest_temperature_c==null?'Unknown':`${num(s.latest_temperature_c)} °C`,`${esc(status)} · ${s.latest_timestamp_utc?fullTimestamp(s.latest_timestamp_utc):''}`)}
       ${card('Average',`${num(s.mean_c)} °C`,`${num(s.minimum_c)}–${num(s.maximum_c)} °C`)}
-      ${card('Ppk',process.capability_status==='insufficient_data'?'Not enough data':num(process.ppk),'Full-history capability estimate; details include observed out-of-range readings')}
+      ${card('Overall temperature performance',process.capability_status==='insufficient_data'?'Not enough data':num(process.ppk),'Ppk compares the full operating history with the selected temperature limits')}
     </div>
     ${lineChart(series,{label:'Recorded temperature over time with 1–6 °C storage limits and cooling-loss events',xLabel:'Recorded time (UTC)',yLabel:'Temperature (°C)',lower:s.lower_limit_c,upper:s.upper_limit_c,markers:coolingMarkers})}
     <p class="source"><a href="https://www.law.cornell.edu/cfr/text/21/640.11" target="_blank" rel="noopener">1–6 °C storage reference</a> · latest data ${esc(timestamp(data.dataset.reference_time_utc))}</p>
   </section>
-  <details id="incidents-details" class="analysis-details"><summary><span>Cooling interruptions</span><small>${detailed.length} recorded · ${incident.breached_count} storage-range crossings</small></summary><section class="details-content">
+  <details id="incidents-details" class="analysis-details"><summary><span>Cooling interruptions and recovery</span><small>${detailed.length} recorded events · ${incident.breached_count} crossed temperature limits</small></summary><section class="details-content">
     <p class="plain-note">For each interruption, BloodWatch records when cooling stopped, when temperature first moved outside 1–6 °C, and when cooling was restored.</p>
     <div class="breach-definition"><span>Cooling lost</span><strong aria-hidden="true">→</strong><span>First reading outside 1–6 °C</span><strong aria-hidden="true">→</strong><span>Cooling restored</span></div>
     <div class="metric-grid two">
       ${card('Most recent limit crossing',latest?minutes(latest.observed_hours_to_breach_or_censoring):missingBreachValue,latest?`${latest.cause==='mechanical'?'Refrigerator failure':'Generator start failure'} · ${esc(latest.incident_id)}`:missingBreachNote)}
       ${card('Average limit-crossing time',incident.mean_observed_hours_to_breach_breached_only==null?missingBreachValue:minutes(incident.mean_observed_hours_to_breach_breached_only),incident.breached_count?`Across ${incident.breached_count} interruptions that crossed the storage range`:missingBreachNote)}
     </div>
-    <p class="plain-note">${detailed.length} recorded interruptions · ${incident.breached_count} crossed 1–6 °C · ${incident.unbreached_censored_count} stayed within range until recovery · ${incident.unknown_count} lack matching temperature readings</p>
-    <details id="incident-timing-details"><summary>See every interruption and recovery time</summary>${rows?`<div class="table-wrap"><table><thead><tr><th>Interruption</th><th>Cooling loss to first reading outside 1–6 °C</th><th>Cooling loss to restoration</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p>No recorded cooling interruptions for this refrigerator.</p>'}<p class="plain-note">A limit crossing is an observed storage-temperature event, not a measurement of when blood becomes biologically unusable.</p></details>
+    <p class="plain-note">${detailed.length} recorded interruptions · ${incident.breached_count} crossed the selected limits · ${incident.unbreached_censored_count} recovered before a crossing · ${incident.unknown_count} lack matching readings</p>
+    <details id="incident-timing-details" class="nested-details"><summary>View event-by-event crossing and recovery times</summary>${rows?`<div class="table-wrap"><table><thead><tr><th>Interruption</th><th>Time from cooling loss to first reading outside limits</th><th>Time from cooling loss to cooling restoration</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p>No recorded cooling interruptions for this refrigerator.</p>'}<p class="plain-note">A limit crossing is an observed storage-temperature event, not a measurement of when blood becomes biologically unusable.</p></details>
   </section></details>
-  <details id="reliability-details" class="analysis-details"><summary><span>Equipment failure risk</span><small>${num(fridge.failures,0)} refrigerator failures · ${generator.failed_demands} failed generator starts</small></summary><section class="details-content"><section class="panel">${sectionTitle(3,'Failure risk')}
+  <details id="reliability-details" class="analysis-details"><summary><span>Refrigerator and generator reliability</span><small>${num(fridge.failures,0)} refrigerator failures · ${generator.failed_demands} failed generator starts</small></summary><section class="details-content"><section class="panel">${sectionTitle('Estimated refrigerator failure risk')}
     <div class="metric-grid four">
       ${card('Refrigerator mechanical failures',num(fridge.failures,0),`${num(fridge.exposure_hours,0)} observed operating hours · blackouts excluded`)}
-      ${card('F(30 d) 95% interval',`${pct(fridge.failure_probability_interval_95.lower)}–${pct(fridge.failure_probability_interval_95.upper)}`,'Exact Poisson rate interval mapped to probability')}
+      ${card(`Failure chance in ${state.horizonDays} days (95% range)`,`${pct(fridge.failure_probability_interval_95.lower)}–${pct(fridge.failure_probability_interval_95.upper)}`,'Model uncertainty range')}
       ${card('Generator failed starts',`${generator.failed_demands} of ${generator.known_demands}`,`${generator.successful_demands} successful starts · ${generator.unknown_demands} unknown excluded`)}
       ${card('Generator failed-start probability',pct(generator.failed_start_probability),'Failed starts ÷ known blackout demands')}
     </div>
     ${zeroFailures?`<p class="plain-note">95% upper rate: ${num(fridge.rate_interval_95.upper,6)} per hour</p>`:lineChart(fridge.cdf.map(p=>({x:p.operating_hours/24,y:p.failure_probability})),{label:'Probability of a refrigerator mechanical failure by operating time',xLabel:'Future operating time (days)',yLabel:'Failure probability F(t)',probability:true})}
   </section>
-  <section class="panel">${sectionTitle(4,'Reliability metrics')}
+  <section class="panel">${sectionTitle('What the reliability estimates mean')}
     <div class="metric-grid three">
-      ${card('Failure rate Î»',`${num(fridge.rate_per_hour,6)} / hour`,'Failures ÷ operating hours')}
-      ${card('Reliability R(t)',pct(fridge.reliability),`No failure through ${state.horizonDays} days`)}
-      ${card('MTBF 95% interval',`${num(fridge.mtbf_interval_95.lower,0)}–${num(fridge.mtbf_interval_95.upper,0)} h`,'Inverse exact rate interval')}
-      ${card('MTBF',fridge.mtbf_hours==null?'Unavailable':`${num(fridge.mtbf_hours,0)} hours`,fridge.mtbf_hours==null?'No failures observed; lower bound shown above':'Mean time between failures')}
+      ${card('Observed failures per run hour',`${num(fridge.rate_per_hour,6)} / hour`,'Past failures divided by recorded operating time')}
+      ${card(`Estimated chance of no failure in ${state.horizonDays} days`,pct(fridge.reliability),'Based on the historical failure rate')}
+      ${card('Estimated hours between failures (95% range)',`${num(fridge.mtbf_interval_95.lower,0)}–${num(fridge.mtbf_interval_95.upper,0)} h`,'Uncertainty range from the historical data')}
+      ${card('Average hours between failures',fridge.mtbf_hours==null?'Not estimable':`${num(fridge.mtbf_hours,0)} hours`,fridge.mtbf_hours==null?'No failures observed; the uncertainty range remains available':'Historical average, not a service-life guarantee')}
       ${card('Backup generator uncertainty',`${pct(generator.wilson_interval_95.lower)}–${pct(generator.wilson_interval_95.upper)}`,'95% failed-start interval')}
     </div>
   </section></section></details>
-  <details id="process-details" class="analysis-details"><summary><span>Methods and details</span><small>${process.capability_status==='estimated'?'Capability estimate available':'Limited baseline data'}</small></summary><section class="details-content"><section class="panel">${sectionTitle(5,'Process analysis')}
+  <details id="process-details" class="analysis-details"><summary><span>Temperature patterns and calculation methods</span><small>${process.capability_status==='estimated'?'Performance estimate available':'More baseline data needed'}</small></summary><section class="details-content"><section class="panel">${sectionTitle('Temperature process analysis')}
     <div class="metric-grid three">
       ${card('Baseline sigma',process.within_sigma_c==null?'Unavailable':`${num(process.within_sigma_c,3)} °C`,'MR-bar estimator: average moving range ÷ 1.128')}
       ${card('Control limits',process.lower_control_limit_c==null?'Unavailable':`${num(process.lower_control_limit_c)}–${num(process.upper_control_limit_c)} °C`,`${process.baseline_count} fixed normal-baseline readings`)}
@@ -156,7 +156,7 @@ function overview(data) {
     <p class="plain-note">${esc(process.autocorrelation_note||'')} Shapiro–Wilk p=${num(process.normality_p_value,4)} (up to 5,000 points).</p>
     ${process.moving_range_series?.length?lineChart(process.moving_range_series.map((point,index)=>({x:index,y:point.moving_range_c})),{label:'Moving range control chart; upper limit 3.267 times average moving range',xLabel:'Baseline reading index',yLabel:'Moving range (C)',upper:process.moving_range_ucl_c,limitText:'UCL'}):''}
     <p class="plain-note">Control rules: ${process.control_signals?.length?process.control_signals.map(signal=>`${esc(signal.rule)} at point ${signal.index+1}`).join('; '):'none fired'} · moving-range UCL ${num(process.moving_range_ucl_c)} °C.</p>
-    <p class="plain-note">CSV-only reliability: ${num(fridge.failures)} failures in ${num(fridge.exposure_hours,0)} operating hours · F(30 d) ${pct(fridge.failure_probability)} (95% ${pct(fridge.failure_probability_interval_95.lower)}–${pct(fridge.failure_probability_interval_95.upper)}). ${esc(fridge.assumptions.join('; '))}</p>
+    <p class="plain-note">Baseline-history reliability estimate: ${num(fridge.failures)} failures in ${num(fridge.exposure_hours,0)} operating hours · F(30 d) ${pct(fridge.failure_probability)} (95% ${pct(fridge.failure_probability_interval_95.lower)}–${pct(fridge.failure_probability_interval_95.upper)}). ${esc(fridge.assumptions.join('; '))}</p>
     <p class="plain-note">Generator ${esc(generatorRisk.generator_id)} Wilson 95% interval ${generatorInterval}; estimated loss ${usd(data.financial_estimates.generator_expected_loss_per_blackout_usd)}/blackout. Upper case ${usd(data.financial_estimates.generator_wilson_upper_case_usd)} assumes a failed start and outage past observed limit crossing; not an annual-loss prediction.</p>
   </section></section></details>
   `;
@@ -165,11 +165,18 @@ function overview(data) {
 
 function scenarioPanel(scenario, data) {
   const scenarioAsOf=`Scenario data as of ${fullTimestamp(data.dataset.reference_time_utc)} (replay, not live).`;
+  const selectedId=data.selection.refrigerator_id;
+  const selectedName=refrigeratorName(selectedId);
   const alarm=scenario.observed_alarm;
-  if(!alarm) return `<section class="scenario-result"><div><p class="eyebrow">Synthetic scenario data</p><h2>${esc(scenario.label)}</h2><p>${esc(scenario.description)}</p><p class="scenario-as-of">${esc(scenarioAsOf)}</p></div><span class="scenario-state">No observed alarm</span></section>`;
+  if(!alarm) return `<section class="scenario-result"><div><p class="eyebrow">Synthetic scenario data</p><h2>${esc(scenario.label)}</h2><p>${esc(scenario.description)}</p><p class="scenario-focus">Selected unit: <strong>${esc(selectedName)}</strong> · no planted failure in this scenario.</p><p class="scenario-as-of">${esc(scenarioAsOf)}</p></div><span class="scenario-state">No observed alarm</span></section>`;
   const cause=scenario.id==='degrading_refrigerator'?'Refrigerator cooling failure':'Backup generator failed to start';
+  const selectedContext=scenario.id==='degrading_refrigerator'
+    ? selectedId===alarm.refrigerator_id
+      ? `Selected unit: ${selectedName} · this is the refrigerator with the planted failure.`
+      : `Selected unit: ${selectedName} · no planted failure here. The demo event affects ${refrigeratorName(alarm.refrigerator_id)}.`
+    : `Selected unit: ${selectedName} · this generator failure affects this refrigerator.`;
   const outage=alarm.outage_duration_hours==null?'':`<span>Outage <strong>${num(alarm.outage_duration_hours)} h</strong></span>`;
-  return `<section class="scenario-result scenario-result--alert"><div class="scenario-copy"><p class="eyebrow">Synthetic scenario data</p><h2>${esc(scenario.label)}</h2><p>${esc(scenario.description)}</p><p class="scenario-as-of">${esc(scenarioAsOf)}</p></div><div class="scenario-outcome"><strong>Observed storage alarm</strong><span>${esc(refrigeratorName(alarm.refrigerator_id))} · ${esc(cause)}</span></div><div class="scenario-stats"><span>First limit crossing<strong>${minutes(alarm.hours_to_first_breach)}</strong></span><span>Excursion duration<strong>${alarm.excursion_duration_hours==null?'Not observed':`${num(alarm.excursion_duration_hours)} h`}</strong></span><span>Recovery<strong>${alarm.recovery_hours==null?'Not observed':`${num(alarm.recovery_hours)} h`}</strong></span><span>Inventory exposed<strong>${usd(alarm.affected_inventory_value_usd)}</strong></span>${outage}</div></section>`;
+  return `<section class="scenario-result scenario-result--alert"><div class="scenario-copy"><p class="eyebrow">Synthetic scenario data</p><h2>${esc(scenario.label)}</h2><p>${esc(scenario.description)}</p><p class="scenario-focus">${esc(selectedContext)}</p><p class="scenario-as-of">${esc(scenarioAsOf)}</p></div><div class="scenario-outcome"><strong>Observed storage alarm</strong><span>${esc(refrigeratorName(alarm.refrigerator_id))} · ${esc(cause)}</span></div><div class="scenario-stats"><span>First limit crossing<strong>${minutes(alarm.hours_to_first_breach)}</strong></span><span>Excursion duration<strong>${alarm.excursion_duration_hours==null?'Not observed':`${num(alarm.excursion_duration_hours)} h`}</strong></span><span>Recovery<strong>${alarm.recovery_hours==null?'Not observed':`${num(alarm.recovery_hours)} h`}</strong></span><span>Inventory exposed<strong>${usd(alarm.affected_inventory_value_usd)}</strong></span>${outage}</div></section>`;
 }
 
 function liveStatusNote(data) {
@@ -177,7 +184,7 @@ function liveStatusNote(data) {
   const reference=fullTimestamp(data.dataset.reference_time_utc);
   const ageMinutes=(Date.now()-Date.parse(data.dataset.reference_time_utc))/60000;
   const freshness=Number.isFinite(ageMinutes)?`${num(ageMinutes)} min as of computer time`:'unavailable';
-  const freshnessText=data.dataset.live_reading_count ? `Live sensor readings: ${data.dataset.live_reading_count}; latest dataset time ${reference}.` : `No live sensor connected; showing history through ${reference}. Latest reading age: ${freshness}.`;
+  const freshnessText=data.dataset.live_reading_count ? `Live mode combines the three CSV history datasets with ${data.dataset.live_reading_count} sensor readings; latest data ${reference}.` : `No live sensor connected. Showing the three CSV history datasets through ${reference}; latest reading age ${freshness}.`;
   const rejected=data.dataset.rejected_readings;
   const reasons=rejected.reasons.map(item=>`${esc(item.reason)} (${item.count})`).join(', ');
   return `<p class="mode-note">${esc(freshnessText)} Rejected readings: ${rejected.count}${reasons?` (${reasons})`:''}.</p>`;
@@ -191,14 +198,14 @@ function render() {
   const fridgeOptions=state.availableRefrigerators.length
     ? state.availableRefrigerators.map(id=>`<option value="${esc(id)}"${id===selectedRefrigerator?' selected':''}>${esc(refrigeratorName(id))} (${esc(refrigeratorCode(id))})</option>`).join('')
     : `<option value="">${state.error?'Refrigerators unavailable':'Loading refrigerators…'}</option>`;
-  root.innerHTML=`<main><header class="masthead"><div><p class="eyebrow">Storage · response · reliability</p><h1>BloodWatch</h1></div><span class="masthead-site">Regional blood storage</span></header>
-    <section class="controls" aria-label="Dashboard controls"><label class="mode-control">Demo scenario / data mode<select id="mode" class="mode-select" ${state.busy?'disabled':''}><option value="live"${state.mode==='live'?' selected':''}>Live sensor feed</option><optgroup label="Synthetic demos"><option value="stable"${state.mode==='stable'?' selected':''}>Stable conditions</option><option value="degrading_refrigerator"${state.mode==='degrading_refrigerator'?' selected':''}>Degrading refrigerator</option><option value="blackout_failed_generator"${state.mode==='blackout_failed_generator'?' selected':''}>Blackout with generator failure</option></optgroup></select></label><label>Refrigerator<select id="refrigerator" ${state.busy?'disabled':''}>${fridgeOptions}</select></label><label>Temperature history<select id="window" ${state.busy?'disabled':''}>${[6,24].map(v=>`<option value="${v}"${v===state.windowHours?' selected':''}>Last ${v} hours</option>`).join('')}</select></label><label>Operating period<select id="horizon" ${state.busy?'disabled':''}>${[7,30,90].map(days=>`<option value="${days}"${days===state.horizonDays?' selected':''}>${days} days</option>`).join('')}</select></label><label>Lower storage limit (°C)<input id="lower-limit" type="number" min="-50" max="49.9" step="0.1" value="${state.lowerLimit}"></label><label>Upper storage limit (°C)<input id="upper-limit" type="number" min="-49.9" max="50" step="0.1" value="${state.upperLimit}"></label></section>
-    <details id="storage-limit-help" class="limit-help"><summary>Storage limit information</summary><div><p><strong>Recommended ranges</strong></p><ul><li>Red cells: 1–6 °C</li><li>Platelets: approximately 20–24 °C</li><li>Frozen plasma: −18 °C or colder</li></ul><p>Confirm the applicable product and local policy. Changing these limits recalculates Cp, Cpk, Pp/Ppk, and the out-of-range percentage.</p></div></details>
-    <details id="csv-upload-details" class="upload-details"><summary>Import temperature CSV</summary><section class="upload-controls" aria-label="Dataset upload"><strong>CSV temperature upload</strong><a download="coldguard-sample.csv" href="data:text/csv;charset=utf-8,unit_id%2Ctimestamp%2Ctemp_C%0AR1%2C2026-10-21T12%3A00%3A00Z%2C4.2">Download sample CSV</a><input id="csv-upload" type="file" accept=".csv,text/csv"><span id="upload-status">Requires unit_id, timestamp, temp_C. Source datasets are not overwritten.</span></section></details>
+  root.innerHTML=`<main><header class="masthead"><div><p class="eyebrow">Regional blood storage · supply integrity</p><h1>BloodWatch</h1></div><span class="masthead-site">Temperature · equipment · inventory</span></header>
+    <section class="controls" aria-label="Dashboard controls"><label class="mode-control">Data view<select id="mode" class="mode-select" ${state.busy?'disabled':''}><option value="live"${state.mode==='live'?' selected':''}>CSV history + incoming readings</option><optgroup label="Synthetic demo scenarios"><option value="stable"${state.mode==='stable'?' selected':''}>Stable conditions</option><option value="degrading_refrigerator"${state.mode==='degrading_refrigerator'?' selected':''}>Refrigerator cooling failure</option><option value="blackout_failed_generator"${state.mode==='blackout_failed_generator'?' selected':''}>Blackout with failed generator</option></optgroup></select></label><label>Refrigerator to inspect<select id="refrigerator" ${state.busy?'disabled':''}>${fridgeOptions}</select></label><label>Temperature history<select id="window" ${state.busy?'disabled':''}>${[6,24].map(v=>`<option value="${v}"${v===state.windowHours?' selected':''}>Last ${v} hours</option>`).join('')}</select></label></section>
+    <section class="welcome-note" aria-label="Getting started"><div><strong>Start here</strong><span>Check overall stock and unit status below, then choose a refrigerator to inspect its temperature history.</span></div><details><summary>What do the warnings mean?</summary><p>Warnings flag a reading outside your selected limits, a recent trend that may cross them, or a process-control signal. They are prompts to review the data, not a prediction that equipment has failed or a decision about blood safety.</p></details></section>
+    <details id="analysis-settings" class="limit-help"><summary>Change analysis limits and estimate period</summary><p class="settings-intro">These settings change how the dashboard evaluates readings and historical risk; they do not alter the source data or refresh rate.</p><div class="analysis-settings-grid"><label>Failure risk estimate period<select id="horizon" ${state.busy?'disabled':''}>${[7,30,90].map(days=>`<option value="${days}"${days===state.horizonDays?' selected':''}>Next ${days} operating days</option>`).join('')}</select><small>Historical model horizon, not a countdown to equipment failure.</small></label><label>Lower temperature limit (°C)<input id="lower-limit" type="number" min="-50" max="49.9" step="0.1" value="${state.lowerLimit}"><small>Readings below this value are flagged.</small></label><label>Upper temperature limit (°C)<input id="upper-limit" type="number" min="-49.9" max="50" step="0.1" value="${state.upperLimit}"><small>Readings above this value are flagged.</small></label></div><details class="product-ranges"><summary>Examples of product storage ranges</summary><p>Red cells: 1–6 °C. Platelets: approximately 20–24 °C. Frozen plasma: −18 °C or colder. Confirm the applicable product and local policy before changing limits.</p></details></details>
     ${state.mode==='live'&&data?liveStatusNote(data):state.mode!=='live'&&data?.scenario?scenarioPanel(data.scenario,data):''}
     ${content?.overviewPanel||''}
-    <div aria-live="polite">${state.error?`<p class="error" role="alert">${esc(state.error)}</p>`:content?`<p class="context">Computer current time: <span id="current-time">${esc(currentTimestamp())}</span> · Dataset reference: ${data.dataset.reference_time_utc?fullTimestamp(data.dataset.reference_time_utc):"Unavailable"}${state.busy?' · Refreshing':''}</p>${content.sections}`:'<p class="loading">Loading dashboard…</p>'}</div>
-    <footer>Synthetic educational data. Storage breaches require review.</footer></main>`;
+    <div aria-live="polite">${state.error?`<p class="error" role="alert">${esc(state.error)}</p>`:content?`<p class="context">Computer local time: <span id="current-time">${esc(currentTimestamp())}</span> · Data timestamp (UTC): ${data.dataset.reference_time_utc?fullTimestamp(data.dataset.reference_time_utc):"Unavailable"}${state.busy?' · Refreshing':''}</p>${content.sections}`:'<p class="loading">Loading dashboard…</p>'}</div>
+    <footer><strong>Class project demonstration.</strong> Baseline datasets and scenarios are synthetic. Alerts and risk estimates are decision-support examples; a qualified person must assess any real storage excursion.</footer></main>`;
   for(const id of openDetails) {
     const element=document.getElementById(id);
     if(element) element.open=true;
@@ -209,13 +216,6 @@ function render() {
   root.querySelector('#horizon')?.addEventListener('change',e=>{state.horizonDays=Number(e.target.value);loadDashboard();});
   root.querySelector('#lower-limit')?.addEventListener('change',e=>{state.lowerLimit=Number(e.target.value);loadDashboard();});
   root.querySelector('#upper-limit')?.addEventListener('change',e=>{state.upperLimit=Number(e.target.value);loadDashboard();});
-  root.querySelector('#csv-upload')?.addEventListener('change',uploadCsv);
-}
-
-async function uploadCsv(event) {
-  const file=event.target.files?.[0]; if(!file) return;
-  const status=document.querySelector('#upload-status');
-  try { const response=await fetch('/api/readings/upload',{method:'POST',headers:{'Content-Type':'text/csv'},body:await file.text()}); const result=await response.json(); if(!response.ok) throw new Error(result.detail||'Upload failed'); status.textContent=`Accepted ${result.accepted} readings`; if(state.mode==='live') loadDashboard(); } catch(error) { status.textContent=error.message; }
 }
 
 async function loadDashboard() {
