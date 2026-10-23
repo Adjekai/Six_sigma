@@ -16,7 +16,7 @@ def test_dashboard_frontend_is_served_without_a_build_step():
     response = client.get("/")
     assert response.status_code == 200
     assert "BloodWatch" in response.text
-    assert "/app.js?v=combined-dashboard-1" in response.text
+    assert "/app.js?v=combined-dashboard-2" in response.text
     frontend = client.get("/app.js").text
     assert "loadDashboard" in frontend
     assert "Data limitations" not in frontend
