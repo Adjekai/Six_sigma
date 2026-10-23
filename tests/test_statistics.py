@@ -104,6 +104,12 @@ def test_control_chart_uses_moving_range_estimator_and_run_rules():
     assert "8 consecutive points on one side" in rules
     assert "6 consecutive points steadily increasing or decreasing" in rules
     assert "3-sigma control limit" in rules
+    assert all(signal["points"] for signal in result["control_signals"])
+    assert all(signal["start_timestamp_utc"] <= signal["timestamp_utc"] for signal in result["control_signals"])
+    assert all(signal["points"][-1]["timestamp_utc"] == signal["timestamp_utc"] for signal in result["control_signals"])
+    eight_point_signal = next(signal for signal in result["control_signals"] if signal["rule"] == "8 consecutive points on one side")
+    assert len(eight_point_signal["points"]) == 8
+    assert [point["temperature_c"] for point in eight_point_signal["points"]] == [row["temperature_c"] for row in displayed]
 
     decreasing = [reading(i * 15, 5.5 - i * .05) for i in range(6)]
     decreasing_result = analyze_temperature_process(decreasing, baseline, baseline + decreasing)

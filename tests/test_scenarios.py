@@ -79,6 +79,11 @@ def test_degrading_refrigerator_scenario_flags_breach_and_inventory_value():
     assert alarm["affected_inventory_value_usd"] == 400 * 240
     assert alarm["excursion_duration_hours"] > 0
     assert refrigerator["status"] == "review_required"
+    warning = next(row for row in result["conditions"]["risk_forecasts"] if row["refrigerator_id"] == "R1")
+    assert warning["status"] == "observed_replay_breach"
+    assert warning["warning_label"] == "Observed breach in replay"
+    assert "latest replay reading shows recovery" in warning["decision_support_reason"]
+    assert result["conditions"]["temperature_warning_count"] == 1
 
 
 def test_blackout_scenario_adds_one_failed_start_and_three_cooling_events():
@@ -94,6 +99,9 @@ def test_blackout_scenario_adds_one_failed_start_and_three_cooling_events():
     alarm = result["scenario"]["observed_alarm"]
     assert alarm["outage_duration_hours"] == 1
     assert alarm["recovery_hours"] is not None
+    warnings = result["conditions"]["risk_forecasts"]
+    assert all(row["status"] == "observed_replay_breach" for row in warnings)
+    assert result["conditions"]["temperature_warning_count"] == 3
 
 
 def test_live_temperature_does_not_change_csv_baseline_or_reliability(tmp_path, monkeypatch):

@@ -92,21 +92,41 @@ def analyze_temperature_process(
         row["temperature_c"] if row["reading_valid"] and row["temperature_c"] is not None else None
         for row in displayed_sequence
     ]
+    def control_signal(start: int, end: int, rule: str) -> dict[str, Any]:
+        points = [
+            {
+                "timestamp_utc": displayed_sequence[index]["timestamp"].isoformat(),
+                "temperature_c": sequence_values[index],
+            }
+            for index in range(start, end + 1)
+            if sequence_values[index] is not None
+        ]
+        return {
+            "index": end,
+            "start_index": start,
+            "end_index": end,
+            "value_c": sequence_values[end],
+            "rule": rule,
+            "start_timestamp_utc": points[0]["timestamp_utc"],
+            "timestamp_utc": points[-1]["timestamp_utc"],
+            "points": points,
+        }
+
     for index, value in enumerate(sequence_values):
         if value is not None and (value < lower_control or value > upper_control):
-            signals.append({"index": index, "value_c": value, "rule": "3-sigma control limit"})
+            signals.append(control_signal(index, index, "3-sigma control limit"))
     for end in range(7, len(sequence_values)):
         window = sequence_values[end - 7:end + 1]
         if any(value is None for value in window):
             continue
         if all(value > center for value in window) or all(value < center for value in window):
-            signals.append({"index": end, "value_c": sequence_values[end], "rule": "8 consecutive points on one side"})
+            signals.append(control_signal(end - 7, end, "8 consecutive points on one side"))
     for end in range(5, len(sequence_values)):
         window = sequence_values[end - 5:end + 1]
         if any(value is None for value in window):
             continue
         if all(a < b for a, b in zip(window, window[1:])) or all(a > b for a, b in zip(window, window[1:])):
-            signals.append({"index": end, "value_c": sequence_values[end], "rule": "6 consecutive points steadily increasing or decreasing"})
+            signals.append(control_signal(end - 5, end, "6 consecutive points steadily increasing or decreasing"))
     result["control_signals"] = signals
     if within_sigma > 0:
         result["cp"] = (upper_limit_c - lower_limit_c) / (6 * within_sigma)

@@ -18,11 +18,11 @@ def test_dashboard_frontend_is_served_without_a_build_step():
     response = client.get("/")
     assert response.status_code == 200
     assert "BloodWatch" in response.text
-    assert "/app.js?v=unified-warnings-2" in response.text
+    assert "/app.js?v=scenario-warnings-layout-1" in response.text
     frontend = client.get("/app.js").text
     assert "loadDashboard" in frontend
-    assert "About the datasets and live readings" in frontend
-    assert "Live readings</strong> are sensor readings stored in the local database" in frontend
+    assert "About the datasets and incoming readings" in frontend
+    assert "Incoming readings</strong> are stored in a local database" in frontend
     assert "Rejected readings:" not in frontend
     assert "Data limitations" not in frontend
     assert "CSV history + incoming readings" in frontend
@@ -43,6 +43,14 @@ def test_dashboard_frontend_is_served_without_a_build_step():
     assert "Refrigerator temperature history" in frontend
     assert "class=\"temperature-controls\"" in frontend
     assert "class=\"risk-row-info\"" in frontend
+    assert ">View pattern</button>" in frontend
+    assert ">Clear highlight</button>" in frontend
+    assert "exact reading" in frontend
+    assert "America/New_York" in frontend
+    assert "Recorded time (Eastern)" in frontend
+    assert "Recorded time (UTC)" not in frontend
+    assert "state.patternHighlight" in frontend
+    assert "scrollIntoView" in frontend
     assert "card('Overall temperature performance'" in frontend
     assert "card('Ppk / observed out-of-spec'" not in frontend
     assert "Refrigerator cooling failure" in frontend
@@ -64,7 +72,7 @@ def test_dashboard_exposes_temperature_risk_and_inventory_exposure():
     assert {row["refrigerator_id"] for row in forecasts} == {"R1", "R2", "R3"}
     assert all(row["forecast_minutes"] == 60 for row in forecasts)
     assert all(row["inventory_value_usd"] == row["inventory_bags"] * 240 for row in forecasts)
-    assert all(row["status"] in {"within_limits", "approaching_limit", "currently_out_of_range", "unusual_pattern", "unknown"} for row in forecasts)
+    assert all(row["status"] in {"within_limits", "approaching_limit", "currently_out_of_range", "unusual_pattern", "observed_replay_breach", "unknown"} for row in forecasts)
     assert all(row["warning_label"] for row in forecasts)
     assert all(row["decision_support_reason"] for row in forecasts)
     assert response.json()["conditions"]["temperature_warning_count"] == sum(row["warning_active"] for row in forecasts)
@@ -228,6 +236,15 @@ def test_synthetic_warning_cycle_changes_count_and_recovers(tmp_path, monkeypatc
         assert r1["status"] == expected_statuses[stage]
         assert body["conditions"]["temperature_warning_count"] == expected_counts[stage]
         assert body["dataset"]["synthetic_warning_cycle_active"] is True
+        if stage == "Warming":
+            event = r1["pattern_event"]
+            assert event["refrigerator_id"] == "R1"
+            assert event["points"][-1]["temperature_c"] == temperatures[-1]
+            assert event["baseline_mean_c"] == body["conditions"]["process_analysis"]["center_line_c"]
+            assert event["lower_control_limit_c"] == body["conditions"]["process_analysis"]["lower_control_limit_c"]
+            assert event["upper_control_limit_c"] == body["conditions"]["process_analysis"]["upper_control_limit_c"]
+        else:
+            assert r1["pattern_event"] is None
 
 
 def test_unknown_scenario_is_rejected():

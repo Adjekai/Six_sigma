@@ -94,6 +94,12 @@ details > summary + * { margin-top:16px; }
 .inline-control select { font:inherit; padding:8px; border-radius:6px; border:1px solid #bdcdd1; }
 .storage-line { stroke:#9f1d35; stroke-width:1; stroke-dasharray:5 3; }
 .center-line { stroke:#344f59; stroke-width:1.5; }
+.baseline-center-line { stroke:#245e49; stroke-width:1.5; }
+.control-limit-line { stroke:#28719a; stroke-width:1.5; stroke-dasharray:2 4; }
+.pattern-highlight-line { fill:none; stroke:#d18b16; stroke-width:3; }
+.pattern-point { fill:#f2a51a; stroke:#6e4700; stroke-width:1.5; }
+.has-highlight .temperature-line { opacity:.38; }
+.has-highlight .limit-band { opacity:.35; }
 .event-line { stroke:#5f0b1b; stroke-width:1.5; stroke-dasharray:4 4; }
 .chart-wrap svg { min-width:580px; }
 dl div { align-items:flex-start; }
@@ -142,10 +148,12 @@ button:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visib
 .risk-signal { display: inline-block; padding: 4px 7px; border-radius: 4px; background: #e7f3ec; color: #246247; font-size: .75rem; font-weight: 700; white-space: nowrap; }
 .risk-signal--approaching_limit, .risk-signal--currently_out_of_range { background: #fff0e5; color: #96471f; }
 .risk-signal--unusual_pattern { background:#fff8db; color:#755b0b; }
+.risk-signal--observed_replay_breach { background:#fff0e5; color:#8e421e; }
 .risk-signal--unknown, .risk-signal--insufficient_data { background: #edf0ef; color: #5e6b68; }
 .risk-row-info { margin: 6px 0 0; color: #526a65; font-size: .7rem; }
 .risk-row-info summary { width: fit-content; color: #42655e; font-weight: 700; }
 .risk-row-info p { min-width: 180px; margin: 5px 0 0; }
+.view-pattern { display:block; margin-top:6px; padding:4px 7px; border:1px solid #b7cfc1; border-radius:4px; background:#f2f8f4; color:#245e49; cursor:pointer; font-size:.7rem; font-weight:750; }
 .generator-summary { margin-top: 12px; padding-top: 10px; border-top: 1px solid #e5dcda; }
 .secondary-details { margin-top: 10px; color: #475c59; font-size: .83rem; }
 .secondary-details summary { width: fit-content; color: #42655e; }
@@ -163,6 +171,15 @@ button:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visib
 .temperature-panel .metric-card > strong { margin-bottom: 3px; font-size: 1.2rem; }
 .temperature-panel .chart-wrap { margin-top: 0; }
 .temperature-panel .chart-wrap svg { max-height: 240px; }
+.pattern-explanation { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; margin:8px 0 0; padding:9px 11px; border-left:3px solid #d18b16; background:#fff8e8; color:#5d5032; font-size:.76rem; }
+.pattern-explanation p { margin:3px 0 0; line-height:1.45; }
+.pattern-explanation button { flex:0 0 auto; padding:6px 9px; border:1px solid #b88b39; border-radius:4px; background:#fff; color:#674b17; cursor:pointer; font:inherit; font-weight:750; }
+.chart-legend { display:flex; flex-wrap:wrap; gap:5px 12px; margin:6px 0 0; color:#526863; font-size:.68rem; }
+.chart-legend span::before { content:''; display:inline-block; width:18px; margin-right:5px; border-top:2px solid; vertical-align:middle; }
+.chart-legend .key-storage::before { border-color:#9f1d35; border-top-style:dashed; }
+.chart-legend .key-control::before { border-color:#28719a; border-top-style:dotted; }
+.chart-legend .key-center::before { border-color:#245e49; }
+.chart-legend .key-pattern::before { border-color:#d18b16; border-top-width:4px; }
 .analysis-details { margin: 8px 0; border: 1px solid #d9e0dc; border-radius: 6px; background: #fff; }
 .analysis-details > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 16px; color: #294744; list-style-position: inside; }
 .analysis-details > summary span { font-weight: 750; }

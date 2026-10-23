@@ -147,6 +147,38 @@ def build_dashboard(
             if signal["index"] == latest_valid_index
         ]
         warning_state = classify_temperature_warning(summary, forecast, active_control_signals)
+        if (
+            scenario in {"degrading_refrigerator", "blackout_failed_generator"}
+            and refrigerator["equipment_id"] in data.get("_scenario_review_refrigerators", set())
+        ):
+            cause = "refrigerator cooling failure" if scenario == "degrading_refrigerator" else "failed generator start"
+            warning_state = {
+                "status": "observed_replay_breach",
+                "label": "Observed breach in replay",
+                "reason": f"This historical replay contains an observed storage-limit breach caused by the planted {cause}; the latest replay reading shows recovery.",
+                "warning_active": True,
+            }
+        pattern_event = None
+        if warning_state["status"] == "unusual_pattern":
+            pattern_points = {
+                point["timestamp_utc"]: point
+                for signal in active_control_signals
+                for point in signal["points"]
+            }
+            ordered_pattern_points = [pattern_points[key] for key in sorted(pattern_points)]
+            pattern_event = {
+                "refrigerator_id": refrigerator["equipment_id"],
+                "rules": list(dict.fromkeys(signal["rule"] for signal in active_control_signals)),
+                "start_timestamp_utc": ordered_pattern_points[0]["timestamp_utc"],
+                "end_timestamp_utc": ordered_pattern_points[-1]["timestamp_utc"],
+                "points": ordered_pattern_points,
+                "baseline_mean_c": process["center_line_c"],
+                "lower_control_limit_c": process["lower_control_limit_c"],
+                "upper_control_limit_c": process["upper_control_limit_c"],
+                "lower_storage_limit_c": lower_limit_c,
+                "upper_storage_limit_c": upper_limit_c,
+                "explanation": warning_state["reason"],
+            }
         inventory_value = (
             refrigerator["current_bags"] * refrigerator["value_per_bag_usd"]
             if refrigerator["value_per_bag_usd"] is not None else None
@@ -167,6 +199,7 @@ def build_dashboard(
             "method": "Linear fit on recent valid readings (2-hour window)",
             "control_signals": process["control_signals"],
             "active_control_signals": active_control_signals,
+            "pattern_event": pattern_event,
             "current_temperature_c": summary["latest_temperature_c"],
             "inventory_bags": refrigerator["current_bags"],
             "inventory_value_usd": inventory_value,

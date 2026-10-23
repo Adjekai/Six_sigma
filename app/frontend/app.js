@@ -1,14 +1,15 @@
 const root = document.querySelector('#root');
-const state = { mode: 'live', refrigeratorId: '', availableRefrigerators: [], horizonDays: 30, windowHours: 6, data: null, error: '', busy: false, request: 0, lowerLimit: 1, upperLimit: 6 };
+const state = { mode: 'live', refrigeratorId: '', availableRefrigerators: [], horizonDays: 30, windowHours: 6, data: null, error: '', busy: false, request: 0, lowerLimit: 1, upperLimit: 6, patternHighlight: null, scrollToPattern: false };
 const esc = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
 const num = (v, digits = 2) => v == null ? 'Not enough data' : Number(v).toLocaleString('en-US', {maximumFractionDigits: digits});
 const pct = v => v == null ? 'Not enough data' : `${num(v * 100, 1)}%`;
 const usd = v => v == null ? 'Not enough data' : new Intl.NumberFormat('en-US', {style:'currency',currency:'USD',maximumFractionDigits:0}).format(v);
 const minutes = hours => hours == null ? 'Not enough data' : `${num(hours * 60, 0)} min`;
-const clock = time => new Intl.DateTimeFormat('en-US', {timeZone:'UTC',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(time));
-const timestamp = time => new Intl.DateTimeFormat('en-US', {timeZone:'UTC',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(time))+' UTC';
-const fullTimestamp = time => new Intl.DateTimeFormat('en-US', {timeZone:'UTC',year:'numeric',month:'long',day:'numeric',hour:'numeric',minute:'2-digit',second:'2-digit',timeZoneName:'short'}).format(new Date(time));
-const currentTimestamp = () => new Intl.DateTimeFormat('en-US', {month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true,timeZoneName:'short'}).format(new Date());
+const easternTimeZone = 'America/New_York';
+const clock = time => new Intl.DateTimeFormat('en-US', {timeZone:easternTimeZone,hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(time));
+const timestamp = time => new Intl.DateTimeFormat('en-US', {timeZone:easternTimeZone,month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false,timeZoneName:'short'}).format(new Date(time));
+const fullTimestamp = time => new Intl.DateTimeFormat('en-US', {timeZone:easternTimeZone,year:'numeric',month:'long',day:'numeric',hour:'numeric',minute:'2-digit',second:'2-digit',timeZoneName:'short'}).format(new Date(time));
+const currentTimestamp = () => new Intl.DateTimeFormat('en-US', {timeZone:easternTimeZone,month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true,timeZoneName:'short'}).format(new Date());
 const refrigeratorName = id => {
   const number = String(id ?? '').match(/(\d+)$/)?.[1];
   return number ? `Refrigerator ${number}` : `Refrigerator ${id}`;
@@ -27,13 +28,14 @@ async function getJson(url) {
   return body;
 }
 
-function lineChart(points, {label, xLabel, yLabel, lower, upper, probability = false, markers = [], center = null, limitText = 'limit'}) {
-  if (!points.length) return '<p class="empty">No recorded values to plot.</p>';
+function lineChart(points, {label, xLabel, yLabel, lower, upper, probability = false, markers = [], center = null, controlLower = null, controlUpper = null, highlightPoints = [], limitText = 'limit'}) {
+  if (!points.length&&!highlightPoints.length) return '<p class="empty">No recorded values to plot.</p>';
   const w=850, h=270, l=65, r=25, top=22, bottom=52;
   const valid=points.filter(p=>p.y!=null);
-  if (!valid.length) return '<p class="empty">No valid values to plot.</p>';
-  const xmin=Math.min(...points.map(p=>p.x)), xmax=Math.max(...points.map(p=>p.x));
-  const ys=valid.map(p=>p.y).concat(lower==null?(upper==null?[]:[upper]):[lower,upper]);
+  if (!valid.length&&!highlightPoints.length) return '<p class="empty">No valid values to plot.</p>';
+  const chartPoints=points.concat(highlightPoints);
+  const xmin=Math.min(...chartPoints.map(p=>p.x)), xmax=Math.max(...chartPoints.map(p=>p.x));
+  const ys=valid.map(p=>p.y).concat(highlightPoints.map(p=>p.y)).concat(lower==null?(upper==null?[]:[upper]):[lower,upper]).concat([center,controlLower,controlUpper].filter(v=>v!=null));
   const ymin=probability?0:Math.floor(Math.min(...ys)-0.4), ymax=probability?1:Math.ceil(Math.max(...ys)+0.4);
   const X=v=>l+(v-xmin)/(xmax-xmin||1)*(w-l-r), Y=v=>top+(ymax-v)/(ymax-ymin||1)*(h-top-bottom);
   let lines='';
@@ -51,9 +53,12 @@ function lineChart(points, {label, xLabel, yLabel, lower, upper, probability = f
     path+=`${pen?'L':'M'}${X(p.x)},${Y(p.y)} `; pen=true;
   }
   const band=lower==null?(upper==null?'':`<line class="storage-line" x1="${l}" x2="${w-r}" y1="${Y(upper)}" y2="${Y(upper)}"/><text x="${w-r-4}" y="${Y(upper)-5}" text-anchor="end">${num(upper)} C ${limitText}</text>`):`<rect class="limit-band" x="${l}" y="${Y(upper)}" width="${w-l-r}" height="${Y(lower)-Y(upper)}"/>${[lower,upper].map(v=>`<line class="storage-line" x1="${l}" x2="${w-r}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${w-r-4}" y="${Y(v)-5}" text-anchor="end">${num(v)} °C ${limitText}</text>`).join('')}`;
-  const centerLine=center==null?'':`<line class="center-line" x1="${l}" x2="${w-r}" y1="${Y(center)}" y2="${Y(center)}"/><text x="${w-r-4}" y="${Y(center)-5}" text-anchor="end">${num(center)} °C center</text>`;
+  const centerLine=center==null?'':`<line class="baseline-center-line" x1="${l}" x2="${w-r}" y1="${Y(center)}" y2="${Y(center)}"/>`;
+  const controlLines=[controlLower,controlUpper].filter(v=>v!=null).map(v=>`<line class="control-limit-line" x1="${l}" x2="${w-r}" y1="${Y(v)}" y2="${Y(v)}"/>`).join('');
   const events=markers.filter(event=>event.x>=xmin&&event.x<=xmax).map((event,index)=>`<line class="event-line" x1="${X(event.x)}" x2="${X(event.x)}" y1="${top}" y2="${h-bottom}"/><text x="${Math.min(X(event.x)+5,w-175)}" y="${top+12+index%2*14}">${esc(event.label)}</text>`).join('');
-  return `<div class="chart-wrap"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(label)}"><title>${esc(label)}</title>${band}${lines}${centerLine}${events}<path d="${path}" class="temperature-line"/>${valid.length===1?`<circle cx="${X(valid[0].x)}" cy="${Y(valid[0].y)}" r="4" class="point"/>`:''}<text x="15" y="15">${esc(yLabel)}</text><text x="${w/2}" y="${h-4}" text-anchor="middle">${esc(xLabel)}</text></svg></div>`;
+  const highlightPath=highlightPoints.map((point,index)=>`${index?'L':'M'}${X(point.x)},${Y(point.y)}`).join(' ');
+  const highlighted=highlightPoints.map(point=>`<circle cx="${X(point.x)}" cy="${Y(point.y)}" r="5" class="pattern-point"><title>${esc(fullTimestamp(point.timestamp))}: ${num(point.y)} °C</title></circle>`).join('');
+  return `<div class="chart-wrap"><svg class="${highlightPoints.length?'has-highlight':''}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(label)}"><title>${esc(label)}</title>${band}${lines}${controlLines}${centerLine}${events}<path d="${path}" class="temperature-line"/>${highlightPath?`<path d="${highlightPath}" class="pattern-highlight-line"/>`:''}${highlighted}${valid.length===1?`<circle cx="${X(valid[0].x)}" cy="${Y(valid[0].y)}" r="4" class="point"/>`:''}<text x="15" y="15">${esc(yLabel)}</text><text x="${w/2}" y="${h-4}" text-anchor="middle">${esc(xLabel)}</text></svg></div>`;
 }
 
 function overview(data) {
@@ -85,13 +90,17 @@ function overview(data) {
     const current=row.current_temperature_c==null?'Unknown':`${num(row.current_temperature_c)} °C`;
     const projected=row.projected_temperature_c==null?'Unavailable':`${num(row.projected_temperature_c)} °C`;
     const slope=row.slope_c_per_hour==null?'unavailable':`${num(row.slope_c_per_hour,3)} C/h`;
-    return `<tr><td data-label="Refrigerator"><strong>${esc(refrigeratorName(row.refrigerator_id))}</strong></td><td data-label="Status"><span class="risk-signal risk-signal--${esc(row.status)}">${esc(row.warning_label)}</span><details id="risk-row-${esc(row.refrigerator_id)}" class="risk-row-info"><summary>Why this status?</summary><p>${esc(row.decision_support_reason)}</p><p>60-minute estimate: preceding two hours of valid readings · ${num(row.reading_count,0)} readings · ${slope}${row.as_of_utc?` · latest ${esc(fullTimestamp(row.as_of_utc))}`:''}</p></details></td><td data-label="Temperature now → estimated in 60 minutes">${current} → ${projected}</td><td data-label="Recorded inventory">${usd(row.inventory_value_usd)} · ${num(row.inventory_bags,0)} bags</td></tr>`;
+    const viewPattern=row.pattern_event?`<button type="button" class="view-pattern" data-view-pattern="${esc(row.refrigerator_id)}">View pattern</button>`:'';
+    return `<tr><td data-label="Refrigerator"><strong>${esc(refrigeratorName(row.refrigerator_id))}</strong></td><td data-label="Status"><span class="risk-signal risk-signal--${esc(row.status)}">${esc(row.warning_label)}</span>${viewPattern}<details id="risk-row-${esc(row.refrigerator_id)}" class="risk-row-info"><summary>Why this status?</summary><p>${esc(row.decision_support_reason)}</p><p>60-minute estimate: preceding two hours of valid readings · ${num(row.reading_count,0)} readings · ${slope}${row.as_of_utc?` · latest ${esc(fullTimestamp(row.as_of_utc))}`:''}</p></details></td><td data-label="Temperature now → estimated in 60 minutes">${current} → ${projected}</td><td data-label="Recorded inventory">${usd(row.inventory_value_usd)} · ${num(row.inventory_bags,0)} bags</td></tr>`;
   }).join('');
   const flaggedForecasts=data.conditions.temperature_warning_count;
   const feedLabel=data.dataset.synthetic_warning_cycle_active
     ? 'Synthetic warning-cycle demonstration · refreshes every 3 s'
     : `${num(data.dataset.live_reading_count,0)} incoming readings · refreshes every 3 s`;
   const selectedRefrigerator=state.refrigeratorId||data.selection.refrigerator_id;
+  const highlightedPattern=state.patternHighlight?.refrigerator_id===selectedRefrigerator?state.patternHighlight:null;
+  const highlightedPoints=(highlightedPattern?.points||[]).map(point=>({x:Date.parse(point.timestamp_utc),y:point.temperature_c,timestamp:point.timestamp_utc}));
+  const patternExplanation=highlightedPattern?`<div class="pattern-explanation"><div><strong>Highlighted control-chart pattern</strong><p>${esc(highlightedPattern.explanation)}</p><p>${esc(fullTimestamp(highlightedPattern.start_timestamp_utc))}–${esc(fullTimestamp(highlightedPattern.end_timestamp_utc))} · ${highlightedPoints.length} exact reading${highlightedPoints.length===1?'':'s'} highlighted</p><div class="chart-legend" aria-label="Chart line key"><span class="key-storage">Storage ${num(highlightedPattern.lower_storage_limit_c)}–${num(highlightedPattern.upper_storage_limit_c)} °C</span><span class="key-control">Control ${num(highlightedPattern.lower_control_limit_c)}–${num(highlightedPattern.upper_control_limit_c)} °C</span><span class="key-center">Baseline mean ${num(highlightedPattern.baseline_mean_c)} °C</span><span class="key-pattern">Trigger</span></div></div><button type="button" id="clear-pattern">Clear highlight</button></div>`:'';
   const refrigeratorOptions=data.selection.available_refrigerators.map(id=>`<option value="${esc(id)}"${id===selectedRefrigerator?' selected':''}>${esc(refrigeratorName(id))} (${esc(refrigeratorCode(id))})</option>`).join('');
   const overviewPanel=`<section class="ops-summary" aria-label="Supply status">
     <div class="summary-heading"><div><p class="eyebrow">Regional blood storage</p><h2>Blood supply overview</h2></div><span class="live-indicator"><i></i>${esc(feedLabel)}</span></div>
@@ -105,14 +114,15 @@ function overview(data) {
     <p class="generator-summary">${state.mode==='live'?'Live readings are combined with sample CSV equipment and failure history. Estimates do not determine product safety or disposition.':'Synthetic demo data for learning; results do not determine product safety or disposition.'}</p>
     <details id="inventory-details" class="secondary-details"><summary>View inventory for each refrigerator</summary><div class="table-wrap"><table><thead><tr><th>Refrigerator</th><th>Relative stock</th><th>Lots</th><th>Value</th></tr></thead><tbody>${inventoryRows}</tbody></table></div></details>
   </section>`;
-  const sections=`<section class="panel temperature-panel"><div class="temperature-heading"><div><p class="eyebrow">Refrigerator temperature history</p><h2>${esc(refrigeratorName(selectedRefrigerator))}</h2></div><span class="condition-tag condition-tag--${esc(s.state)}">${esc(status)}</span></div>
+  const sections=`<section id="temperature-history" class="panel temperature-panel"><div class="temperature-heading"><div><p class="eyebrow">Refrigerator temperature history</p><h2>${esc(refrigeratorName(selectedRefrigerator))}</h2></div><span class="condition-tag condition-tag--${esc(s.state)}">${esc(status)}</span></div>
     <div class="temperature-controls"><label>Refrigerator to inspect<select id="refrigerator" ${state.busy?'disabled':''}>${refrigeratorOptions}</select></label><label>Temperature history<select id="window" ${state.busy?'disabled':''}>${[6,24].map(v=>`<option value="${v}"${v===state.windowHours?' selected':''}>Last ${v} hours</option>`).join('')}</select></label></div>
     <div class="metric-grid three">
       ${card('Latest',s.latest_temperature_c==null?'Unknown':`${num(s.latest_temperature_c)} °C`,`${esc(status)} · ${s.latest_timestamp_utc?fullTimestamp(s.latest_timestamp_utc):''}`)}
       ${card('Average',`${num(s.mean_c)} °C`,`${num(s.minimum_c)}–${num(s.maximum_c)} °C`)}
       ${card('Overall temperature performance',process.capability_status==='insufficient_data'?'Not enough data':num(process.ppk),'Ppk compares the full operating history with the selected temperature limits')}
     </div>
-    ${lineChart(series,{label:'Recorded temperature over time with 1–6 °C storage limits and cooling-loss events',xLabel:'Recorded time (UTC)',yLabel:'Temperature (°C)',lower:s.lower_limit_c,upper:s.upper_limit_c,markers:coolingMarkers})}
+    ${lineChart(series,{label:'Recorded temperature over time with storage limits, cooling-loss events, and any selected control-chart pattern',xLabel:'Recorded time (Eastern)',yLabel:'Temperature (°C)',lower:s.lower_limit_c,upper:s.upper_limit_c,markers:highlightedPattern?[]:coolingMarkers,center:highlightedPattern?.baseline_mean_c,controlLower:highlightedPattern?.lower_control_limit_c,controlUpper:highlightedPattern?.upper_control_limit_c,highlightPoints:highlightedPoints})}
+    ${patternExplanation}
     <p class="source"><a href="https://www.law.cornell.edu/cfr/text/21/640.11" target="_blank" rel="noopener">1–6 °C storage reference</a> · latest data ${esc(timestamp(data.dataset.reference_time_utc))}</p>
   </section>
   <details id="incidents-details" class="analysis-details"><summary><span>Cooling interruptions and recovery</span><small>${detailed.length} recorded events · ${incident.breached_count} crossed temperature limits</small></summary><section class="details-content">
@@ -197,6 +207,22 @@ function render() {
   root.querySelector('#horizon')?.addEventListener('change',e=>{state.horizonDays=Number(e.target.value);loadDashboard();});
   root.querySelector('#lower-limit')?.addEventListener('change',e=>{state.lowerLimit=Number(e.target.value);loadDashboard();});
   root.querySelector('#upper-limit')?.addEventListener('change',e=>{state.upperLimit=Number(e.target.value);loadDashboard();});
+  root.querySelectorAll('[data-view-pattern]').forEach(button=>button.addEventListener('click',()=>{
+    const refrigeratorId=button.dataset.viewPattern;
+    const warning=state.data?.conditions.risk_forecasts.find(row=>row.refrigerator_id===refrigeratorId);
+    if(!warning?.pattern_event) return;
+    state.patternHighlight=JSON.parse(JSON.stringify(warning.pattern_event));
+    state.refrigeratorId=refrigeratorId;
+    const eventHours=(Date.parse(warning.pattern_event.end_timestamp_utc)-Date.parse(warning.pattern_event.start_timestamp_utc))/3600000;
+    state.windowHours=eventHours<=6?6:24;
+    state.scrollToPattern=true;
+    loadDashboard();
+  }));
+  root.querySelector('#clear-pattern')?.addEventListener('click',()=>{state.patternHighlight=null;render();});
+  if(state.scrollToPattern&&!state.busy) {
+    state.scrollToPattern=false;
+    requestAnimationFrame(()=>document.querySelector('#temperature-history')?.scrollIntoView({behavior:'smooth',block:'start'}));
+  }
 }
 
 async function loadDashboard() {
