@@ -16,7 +16,7 @@ def test_dashboard_frontend_is_served_without_a_build_step():
     response = client.get("/")
     assert response.status_code == 200
     assert "BloodWatch" in response.text
-    assert "/app.js?v=scenario-mode-2" in response.text
+    assert "/app.js?v=compact-risk-1" in response.text
     frontend = client.get("/app.js").text
     assert "loadDashboard" in frontend
     assert "Data limitations" not in frontend
@@ -31,7 +31,8 @@ def test_dashboard_frontend_is_served_without_a_build_step():
     assert "row.reading_count" in frontend
     assert "row.slope_c_per_hour" in frontend
     assert "fullTimestamp(row.as_of_utc)" in frontend
-    assert "Estimate; linear fit; N=" in frontend
+    assert "About alerts" in frontend
+    assert "class=\"risk-row-info\"" in frontend
     assert "card('Observed out of specification'" in frontend
     assert "card('Ppk / observed out-of-spec'" not in frontend
     assert "Degrading refrigerator" in frontend
