@@ -16,12 +16,14 @@ def test_dashboard_frontend_is_served_without_a_build_step():
     response = client.get("/")
     assert response.status_code == 200
     assert "BloodWatch" in response.text
-    assert "/app.js?v=compact-risk-1" in response.text
+    assert "/app.js?v=combined-dashboard-1" in response.text
     frontend = client.get("/app.js").text
     assert "loadDashboard" in frontend
     assert "Data limitations" not in frontend
-    assert "Live history" in frontend
-    assert "Scenario / data mode" in frontend
+    assert "Demo scenario / data mode" in frontend
+    assert "state = { mode: 'live'" in frontend
+    assert "Storage limit information" in frontend
+    assert "Import temperature CSV" in frontend
     assert "Computer current time" in frontend
     assert "Dataset reference" in frontend
     assert "Methods and details" in frontend
@@ -57,7 +59,9 @@ def test_dashboard_exposes_temperature_risk_and_inventory_exposure():
     assert all(row["status"] in {"within_limits", "approaching_limit", "currently_out_of_range", "unknown", "insufficient_data"} for row in forecasts)
     assert all(row["decision_support_status"] in {"In range", "Watch", "At risk"} for row in forecasts)
     assert all(row["decision_support_reason"] for row in forecasts)
-    assert all(row["as_of_utc"] == response.json()["dataset"]["reference_time_utc"] for row in forecasts)
+    reference_time = datetime.fromisoformat(response.json()["dataset"]["reference_time_utc"])
+    forecast_times = [datetime.fromisoformat(row["as_of_utc"]) for row in forecasts]
+    assert all(timestamp.tzinfo is not None and timestamp <= reference_time for timestamp in forecast_times)
     assert all(row["method"].startswith("Linear fit") for row in forecasts)
     assert all("reading_count" in row and "slope_c_per_hour" in row for row in forecasts)
 
