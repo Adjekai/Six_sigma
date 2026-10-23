@@ -6,6 +6,7 @@ from typing import Any
 from .incidents import summarize_breach_and_recovery
 from .reliability import generator_reliability, refrigerator_reliability
 from .repository import load_data
+from .scenarios import SCENARIOS, load_scenario_data
 from .temperature import analyze_temperature_process, forecast_temperature_limit_crossing, summarize_temperature
 
 
@@ -69,11 +70,14 @@ def build_dashboard(
     horizon_operating_days: float = 30,
     lower_limit_c: float = 1,
     upper_limit_c: float = 6,
+    scenario: str | None = None,
 ) -> dict[str, Any]:
     if temperature_window_hours <= 0 or horizon_operating_days <= 0:
         raise ValueError("Window and operating horizon must be greater than zero")
 
-    data = load_data()
+    data = load_data(include_live_readings=scenario is None)
+    if scenario is not None:
+        data = load_scenario_data(data, scenario)
     reference = data["reference_time"]
     equipment = _equipment(data["refrigerator_periods"])
     equipment_ids = {row["equipment_id"] for row in equipment}
@@ -131,6 +135,8 @@ def build_dashboard(
         ]
         if summary["state"] == "unknown":
             status, reasons = "unknown", ["Latest temperature condition is unknown"]
+        elif refrigerator["equipment_id"] in data.get("_scenario_review_refrigerators", set()):
+            status, reasons = "review_required", ["Observed synthetic scenario excursion requires review"]
         elif active or summary["state"] in {"below_limit", "above_limit"} or forecast["status"] == "approaching_limit":
             status = "review_required"
             reasons = []
@@ -234,7 +240,7 @@ def build_dashboard(
         }
         for row in selected_rows
     ]
-    return {
+    result = {
         "dataset": {
             "name": "Blood bank equipment history",
             "synthetic": True,
@@ -276,3 +282,42 @@ def build_dashboard(
         },
         "warnings": all_warnings,
     }
+    if scenario is not None:
+        scenario_info = {
+            "id": scenario,
+            **SCENARIOS[scenario],
+            "synthetic_demo": True,
+            "observed_alarm": None,
+        }
+        if scenario in {"degrading_refrigerator", "blackout_failed_generator"}:
+            event_id = "DEMO-RF-001" if scenario == "degrading_refrigerator" else "DEMO-GF-001"
+            event = next(
+                row for row in breach_recovery["incidents"]
+                if row["failure_event_id"] == event_id
+                and row["refrigerator_id"] == ("R1" if scenario == "degrading_refrigerator" else refrigerator_id)
+            )
+            affected_inventory = next(
+                row for row in inventory_rows if row["refrigerator_id"] == event["refrigerator_id"]
+            )
+            scenario_info["observed_alarm"] = {
+                "status": "review_required" if event["breach_status"] == "breached" else event["breach_status"],
+                "event_id": event_id,
+                "refrigerator_id": event["refrigerator_id"],
+                "cause": event["cause"],
+                "first_breach_utc": event["first_breach_utc"],
+                "hours_to_first_breach": event["observed_hours_to_breach_or_censoring"],
+                "excursion_duration_hours": (
+                    event["recovery_hours"] - event["observed_hours_to_breach_or_censoring"]
+                    if event["breach_status"] == "breached" and event["recovery_hours"] is not None
+                    else None
+                ),
+                "recovery_hours": event["recovery_hours"],
+                "affected_inventory_value_usd": affected_inventory["inventory_value_usd"],
+            }
+            if scenario == "blackout_failed_generator":
+                demand = next(row for row in data["generator_demands"] if row["blackout_event_id"] == event_id)
+                scenario_info["observed_alarm"]["outage_duration_hours"] = (
+                    demand["blackout_end"] - demand["blackout_start"]
+                ).total_seconds() / 3600
+        result["scenario"] = scenario_info
+    return result

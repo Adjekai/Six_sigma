@@ -41,6 +41,18 @@ Real sensor software can send readings to `POST /api/readings` as JSON:
 
 The refrigerator ID must already exist in the equipment dataset. Timestamps must include a timezone; invalid readings should use `"temperature_c": null` and `"reading_valid": false`. Readings are saved in `data/live_readings.sqlite3` and merged with the sample history. Set `BLOODWATCH_LIVE_DB` to use a different SQLite file. The API currently binds to localhost and has no sensor authentication; do not expose it to a network until authentication and transport security are configured.
 
+## Dataset modes
+
+BloodWatch uses three related CSV datasets as its equipment and history baseline:
+
+- `data/blood_temperature.csv` contains temperature readings.
+- `data/refrigerator_failures.csv` contains refrigerator identity, operating exposure, inventory, and mechanical events.
+- `data/generator_failures.csv` contains blackout demands and generator start outcomes.
+
+The dashboard opens in **Live data** mode. It uses the three CSV datasets and overlays readings received at `POST /api/readings` from the SQLite live feed. The bundled `scripts/stream_temperature.py` producer is simulated; use a real logger adapter to send actual readings.
+
+The Data mode selector also offers three reproducible synthetic demonstrations: Stable conditions, Degrading refrigerator, and Blackout with failed generator. These scenarios are generated from the same three CSV datasets and are clearly labeled synthetic. They do not use or overwrite live SQLite readings. Return to **Live data** to see the sensor feed.
+
 ## Overview
 
 Each folder under `data/scenarios/` contains five CSV files and `metadata.json`. Every scenario has three refrigerators and one shared backup generator.

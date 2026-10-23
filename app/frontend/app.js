@@ -1,5 +1,5 @@
 const root = document.querySelector('#root');
-const state = { refrigeratorId: '', availableRefrigerators: [], horizonDays: 30, windowHours: 6, data: null, error: '', busy: false, request: 0 };
+const state = { mode: 'live', refrigeratorId: '', availableRefrigerators: [], horizonDays: 30, windowHours: 6, data: null, error: '', busy: false, request: 0 };
 const esc = value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
 const num = (v, digits = 2) => v == null ? 'Not enough data' : Number(v).toLocaleString('en-US', {maximumFractionDigits: digits});
 const pct = v => v == null ? 'Not enough data' : `${num(v * 100, 1)}%`;
@@ -156,6 +156,14 @@ function overview(data) {
   return {overviewPanel,sections};
 }
 
+function scenarioPanel(scenario) {
+  const alarm=scenario.observed_alarm;
+  if(!alarm) return `<section class="scenario-result"><div><p class="eyebrow">Synthetic dataset scenario</p><h2>${esc(scenario.label)}</h2><p>${esc(scenario.description)}</p></div><span class="scenario-state">No observed alarm</span></section>`;
+  const cause=scenario.id==='degrading_refrigerator'?'Refrigerator cooling failure':'Backup generator failed to start';
+  const outage=alarm.outage_duration_hours==null?'':`<span>Outage <strong>${num(alarm.outage_duration_hours)} h</strong></span>`;
+  return `<section class="scenario-result scenario-result--alert"><div class="scenario-copy"><p class="eyebrow">Synthetic dataset scenario</p><h2>${esc(scenario.label)}</h2><p>${esc(scenario.description)}</p></div><div class="scenario-outcome"><strong>Observed storage alarm</strong><span>${esc(refrigeratorName(alarm.refrigerator_id))} · ${esc(cause)}</span></div><div class="scenario-stats"><span>First limit crossing<strong>${minutes(alarm.hours_to_first_breach)}</strong></span><span>Recovery<strong>${alarm.recovery_hours==null?'Not observed':`${num(alarm.recovery_hours)} h`}</strong></span><span>Inventory exposed<strong>${usd(alarm.affected_inventory_value_usd)}</strong></span>${outage}</div></section>`;
+}
+
 function render() {
   const openDetails=[...root.querySelectorAll('details[open]')].map(item=>item.id);
   const data=state.data;
@@ -165,7 +173,8 @@ function render() {
     ? state.availableRefrigerators.map(id=>`<option value="${esc(id)}"${id===selectedRefrigerator?' selected':''}>${esc(refrigeratorName(id))} (${esc(refrigeratorCode(id))})</option>`).join('')
     : `<option value="">${state.error?'Refrigerators unavailable':'Loading refrigerators…'}</option>`;
   root.innerHTML=`<main><header class="masthead"><div><p class="eyebrow">Storage · response · reliability</p><h1>BloodWatch</h1></div></header>
-    <section class="controls" aria-label="Dashboard controls"><label>Refrigerator<select id="refrigerator" ${state.busy?'disabled':''}>${fridgeOptions}</select></label><label>Temperature history<select id="window" ${state.busy?'disabled':''}>${[6,24].map(v=>`<option value="${v}"${v===state.windowHours?' selected':''}>Last ${v} hours</option>`).join('')}</select></label><label>Operating period<select id="horizon" ${state.busy?'disabled':''}>${[7,30,90].map(days=>`<option value="${days}"${days===state.horizonDays?' selected':''}>${days} days</option>`).join('')}</select></label></section>
+    <section class="controls" aria-label="Dashboard controls"><label>Data mode<select id="mode" ${state.busy?'disabled':''}><option value="live"${state.mode==='live'?' selected':''}>Live data</option><option value="stable"${state.mode==='stable'?' selected':''}>Demo · Stable conditions</option><option value="degrading_refrigerator"${state.mode==='degrading_refrigerator'?' selected':''}>Demo · Degrading refrigerator</option><option value="blackout_failed_generator"${state.mode==='blackout_failed_generator'?' selected':''}>Demo · Blackout and generator failure</option></select></label><label>Refrigerator<select id="refrigerator" ${state.busy?'disabled':''}>${fridgeOptions}</select></label><label>Temperature history<select id="window" ${state.busy?'disabled':''}>${[6,24].map(v=>`<option value="${v}"${v===state.windowHours?' selected':''}>Last ${v} hours</option>`).join('')}</select></label><label>Operating period<select id="horizon" ${state.busy?'disabled':''}>${[7,30,90].map(days=>`<option value="${days}"${days===state.horizonDays?' selected':''}>${days} days</option>`).join('')}</select></label></section>
+    ${state.mode==='live'?'<p class="mode-note">Live mode combines the three CSV history datasets with incoming sensor readings.</p>':data?.scenario?scenarioPanel(data.scenario):''}
     ${content?.overviewPanel||''}
     <div aria-live="polite">${state.error?`<p class="error" role="alert">${esc(state.error)}</p>`:content?`<p class="context">Current time: <span id="current-time">${esc(currentTimestamp())}</span>${state.busy?' · Refreshing':''}</p>${content.sections}`:'<p class="loading">Loading dashboard…</p>'}</div>
     <footer>Synthetic educational data. Storage breaches require review.</footer></main>`;
@@ -173,6 +182,7 @@ function render() {
     const element=document.getElementById(id);
     if(element) element.open=true;
   }
+  root.querySelector('#mode').addEventListener('change',e=>{state.mode=e.target.value;loadDashboard();});
   root.querySelector('#refrigerator').addEventListener('change',e=>{state.refrigeratorId=e.target.value;loadDashboard();});
   root.querySelector('#window').addEventListener('change',e=>{state.windowHours=Number(e.target.value);loadDashboard();});
   root.querySelector('#horizon')?.addEventListener('change',e=>{state.horizonDays=Number(e.target.value);loadDashboard();});
@@ -182,6 +192,7 @@ async function loadDashboard() {
   const request=++state.request;
   state.busy=true; state.error=''; render();
   const params=new URLSearchParams({horizon_operating_days:String(state.horizonDays),temperature_window_hours:String(state.windowHours)});
+  if(state.mode!=='live') params.set('scenario',state.mode);
   if(state.refrigeratorId) params.set('refrigerator_id',state.refrigeratorId);
   try {const data=await getJson(`/api/dashboard?${params}`); if(request!==state.request)return;state.data=data;state.availableRefrigerators=data.selection.available_refrigerators;state.refrigeratorId=data.selection.refrigerator_id;}
   catch(error){if(request!==state.request)return;state.error=error.message;}

@@ -59,3 +59,34 @@ def test_every_cooling_interruption_has_matching_temperature_readings():
 def test_unknown_refrigerator_is_rejected():
     with pytest.raises(ValueError, match="Unknown refrigerator"):
         build_dashboard(refrigerator_id="DOES-NOT-EXIST")
+
+
+def test_stable_demo_has_no_crossings_or_failed_generator_starts():
+    result = build_dashboard(scenario="stable")
+    assert result["scenario"]["synthetic_demo"] is True
+    assert result["scenario"]["observed_alarm"] is None
+    assert result["reliability"]["selected_generator"]["failed_demands"] == 0
+    assert result["reliability"]["selected_breach_recovery"]["breached_count"] == 0
+    assert all(row["status"] == "within_limits" for row in result["conditions"]["equipment"])
+
+
+def test_degrading_refrigerator_demo_flags_breach_and_inventory_value():
+    result = build_dashboard(scenario="degrading_refrigerator")
+    alarm = result["scenario"]["observed_alarm"]
+    refrigerator = next(row for row in result["conditions"]["equipment"] if row["equipment_id"] == "R1")
+    assert alarm["status"] == "review_required"
+    assert alarm["refrigerator_id"] == "R1"
+    assert alarm["affected_inventory_value_usd"] == 400 * 240
+    assert refrigerator["status"] == "review_required"
+
+
+def test_blackout_demo_adds_one_failed_start_and_three_cooling_events():
+    result = build_dashboard(scenario="blackout_failed_generator")
+    event_rows = [
+        row for row in result["reliability"]["breach_recovery"]["incidents"]
+        if row["failure_event_id"] == "DEMO-GF-001"
+    ]
+    assert result["scenario"]["observed_alarm"]["cause"] == "generator_failed_start"
+    assert result["reliability"]["selected_generator"]["failed_demands"] == 3
+    assert len(event_rows) == 3
+    assert all(row["breach_status"] == "breached" for row in event_rows)

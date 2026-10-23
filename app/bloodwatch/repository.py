@@ -46,7 +46,7 @@ def _boolean(value: str, field: str) -> bool:
     return value.lower() == "true"
 
 
-def load_data() -> dict[str, Any]:
+def load_data(include_live_readings: bool = True) -> dict[str, Any]:
     data = {
         "temperatures": _read_csv("blood_temperature.csv"),
         "refrigerator_periods": _read_csv("refrigerator_failures.csv"),
@@ -54,7 +54,7 @@ def load_data() -> dict[str, Any]:
     }
     _coerce(data)
     _validate(data)
-    live_readings = load_temperature_readings()
+    live_readings = load_temperature_readings() if include_live_readings else []
     data["live_reading_count"] = len(live_readings)
     data["temperatures"].extend(live_readings)
     operational = [row["timestamp"] for row in data["temperatures"] if not _is_baseline_reading(row, data)]

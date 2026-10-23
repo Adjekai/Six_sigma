@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from bloodwatch.live_data import record_temperature_reading
 from bloodwatch.repository import DatasetError, known_refrigerator_ids
+from bloodwatch.scenarios import scenario_options
 from bloodwatch.service import build_dashboard
 
 
@@ -34,15 +35,22 @@ def dashboard(
     refrigerator_id: str | None = None,
     temperature_window_hours: float = Query(default=24, gt=0, le=168),
     horizon_operating_days: float = Query(default=30, gt=0, le=365),
+    scenario: str | None = None,
 ) -> dict:
     try:
         return build_dashboard(
             refrigerator_id=refrigerator_id,
             temperature_window_hours=temperature_window_hours,
             horizon_operating_days=horizon_operating_days,
+            scenario=scenario,
         )
     except (DatasetError, ValueError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/scenarios")
+def scenarios() -> list[dict[str, str]]:
+    return scenario_options()
 
 
 class TemperatureReading(BaseModel):
