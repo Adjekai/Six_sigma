@@ -1,10 +1,8 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
 
 from api import app
-from bloodwatch.live_data import delete_simulated_temperature_readings, record_temperature_reading
-from scripts.stream_temperature import WARNING_CYCLE
 
 
 client = TestClient(app)
@@ -198,53 +196,6 @@ def test_scenario_uses_csvs_without_live_rows_and_live_mode_still_includes_them(
     assert scenario_result["dataset"]["live_reading_count"] == 0
     assert scenario_result["scenario"]["synthetic_data"] is True
     assert scenario_result["scenario"]["id"] == "stable"
-
-
-def test_synthetic_warning_cycle_changes_count_and_recovers(tmp_path, monkeypatch):
-    monkeypatch.setenv("BLOODWATCH_LIVE_DB", str(tmp_path / "warning-cycle.sqlite3"))
-    refrigerator_ids = ["R1", "R2", "R3"]
-    expected_statuses = {
-        "Normal": "within_limits",
-        "Warming": "unusual_pattern",
-        "Projected crossing": "approaching_limit",
-        "Actual breach": "currently_out_of_range",
-        "Recovery": "within_limits",
-    }
-    expected_counts = {
-        "Normal": 0,
-        "Warming": 1,
-        "Projected crossing": 1,
-        "Actual breach": 1,
-        "Recovery": 0,
-    }
-
-    for stage, temperatures in WARNING_CYCLE:
-        delete_simulated_temperature_readings(refrigerator_ids)
-        now = datetime.now(timezone.utc)
-        for index, refrigerator_id in enumerate(refrigerator_ids):
-            values = temperatures if index == 0 else (4.0, 4.1, 3.9, 4.0)
-            for offset, temperature in zip((-90, -60, -30, 0), values):
-                assert record_temperature_reading(
-                    refrigerator_id,
-                    now + timedelta(minutes=offset),
-                    temperature,
-                    True,
-                    "simulator-warning-cycle",
-                )
-        body = client.get("/api/dashboard").json()
-        r1 = next(row for row in body["conditions"]["risk_forecasts"] if row["refrigerator_id"] == "R1")
-        assert r1["status"] == expected_statuses[stage]
-        assert body["conditions"]["temperature_warning_count"] == expected_counts[stage]
-        assert body["dataset"]["synthetic_warning_cycle_active"] is True
-        if stage == "Warming":
-            event = r1["pattern_event"]
-            assert event["refrigerator_id"] == "R1"
-            assert event["points"][-1]["temperature_c"] == temperatures[-1]
-            assert event["baseline_mean_c"] == body["conditions"]["process_analysis"]["center_line_c"]
-            assert event["lower_control_limit_c"] == body["conditions"]["process_analysis"]["lower_control_limit_c"]
-            assert event["upper_control_limit_c"] == body["conditions"]["process_analysis"]["upper_control_limit_c"]
-        else:
-            assert r1["pattern_event"] is None
 
 
 def test_unknown_scenario_is_rejected():

@@ -12,9 +12,6 @@ from bloodwatch.temperature import (
     forecast_temperature_limit_crossing,
     summarize_temperature,
 )
-from scripts.stream_temperature import WARNING_CYCLE
-
-
 UTC = timezone.utc
 
 
@@ -192,6 +189,13 @@ def test_immediate_breach_detection_does_not_require_forecast_history():
 
 def test_warning_priority_statuses_reasons_and_recovery():
     baseline = [reading(index * 15, 3.96 + (index % 2) * .08) for index in range(20)]
+    warning_status_cases = (
+        ("Normal", (4.0, 4.1, 3.9, 4.0)),
+        ("Warming", (4.0, 4.1, 4.2, 4.3)),
+        ("Projected crossing", (4.0, 4.4, 4.9, 5.4)),
+        ("Actual breach", (4.0, 4.8, 5.6, 6.3)),
+        ("Recovery", (4.0, 4.1, 3.9, 4.0)),
+    )
     expected = {
         "Normal": "within_limits",
         "Warming": "unusual_pattern",
@@ -200,7 +204,7 @@ def test_warning_priority_statuses_reasons_and_recovery():
         "Recovery": "within_limits",
     }
     results = {}
-    for stage, values in WARNING_CYCLE:
+    for stage, values in warning_status_cases:
         rows = [reading(offset, value) for offset, value in zip((0, 30, 60, 90), values)]
         reference = rows[-1]["timestamp"]
         summary = summarize_temperature(rows, reference)

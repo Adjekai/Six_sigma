@@ -19,7 +19,6 @@ The dashboard is a decision-support demonstration. It flags readings or trends f
 - **Cooling interruptions:** time from recorded cooling loss to the first valid out-of-range reading, plus time to recorded cooling restoration. A temperature-limit crossing is not a biological spoilage time.
 - **Reliability estimates:** pooled refrigerator mechanical-failure estimates from failure counts and operating-hour exposure; generator failed-start estimates from known blackout outcomes.
 - **Scenario demonstrations:** stable conditions, a planted refrigerator cooling failure, and a failed generator start during a blackout.
-- **Fast warning demonstration:** an optional simulated feed cycles through warming, a projected crossing, an observed breach, and recovery so the warning interface can be reviewed quickly.
 
 ### Data modes
 
@@ -30,7 +29,7 @@ The dashboard is a decision-support demonstration. It flags readings or trends f
 | Degrading refrigerator | Synthetic replay with a planted failure on R1 | Show a refrigerator cooling-loss response. |
 | Blackout with failed generator | Synthetic replay of one failed start affecting the refrigerators connected to G1 | Show a shared-power event. |
 
-The bundled temperature producer is a simulator, not a hardware sensor. The normal `run` command starts it automatically near 4 °C; the optional `run-warning-demo` cycles through normal, warming, projected crossing, actual breach, and recovery. All baseline files, generated readings, and scenario events are synthetic educational data.
+The bundled temperature producer is a simulator, not a hardware sensor. The `run` command starts it automatically near 4 °C. All baseline files, generated readings, and scenario events are synthetic educational data.
 
 ### Quick start
 
@@ -39,17 +38,20 @@ Python 3.12–3.15 is supported; Python 3.14 or 3.15 is recommended.
 | Task | macOS | Windows PowerShell |
 |---|---|---|
 | Create environment, install packages, generate the baseline CSV files | `python3 scripts/project.py setup` | `py scripts\project.py setup` |
-| Check Python and installed packages | `python3 scripts/project.py doctor` | `py scripts\project.py doctor` |
 | Run the dashboard | `python3 scripts/project.py run` | `py scripts\project.py run` |
-| Run the fast synthetic warning demonstration | `python3 scripts/project.py run-warning-demo` | `py scripts\project.py run-warning-demo` |
-| Run the automated checks | `python3 scripts/project.py test` | `py scripts\project.py test` |
-| Regenerate the three baseline CSV files | `python3 scripts/project.py data` | `py scripts\project.py data` |
 
 Open <http://127.0.0.1:8000>. The `run` command starts the dashboard and a simulated temperature feed together. It sends one reading for each refrigerator every 15 seconds, so the incoming-reading count updates automatically. Stop both with Ctrl+C in the terminal.
 
 The normal feed is synthetic data stored in the local SQLite database. Each checkout maintains its own database. To run the simulator separately or change its interval, use `python scripts/stream_temperature.py`; options include `--api-url`, `--interval`, `--refrigerators`, and `--once`.
 
-`run-warning-demo` is an optional, clearly labeled synthetic demonstration. It repeats **Normal → Warming → Projected crossing → Actual breach → Recovery**, holding each stage for six real seconds while using four UTC readings spaced 30 minutes apart. The dashboard refreshes every three seconds, so the warning label and count change without waiting through a real two-hour trend. The first refrigerator follows the warning cycle while the other two receive stable readings. The demonstration deletes and replaces only rows produced by the bundled simulators; it does not modify the three CSV datasets or other sensor sources. Stop it with Ctrl+C. The regular `run` command continues to use the normal feed near 4 °C.
+### Optional support commands
+
+Most dashboard users do not need these commands. They support troubleshooting and dataset regeneration.
+
+| Task | macOS | Windows PowerShell | When to use it |
+|---|---|---|---|
+| Check Python and installed packages | `python3 scripts/project.py doctor` | `py scripts\project.py doctor` | Troubleshoot setup or dependency problems. |
+| Regenerate the three baseline CSV files | `python3 scripts/project.py data` | `py scripts\project.py data` | Reproduce the synthetic datasets without repeating the full setup. |
 
 ### Important assumptions and limitations
 
@@ -113,7 +115,7 @@ Function and endpoint notes use small labels to make their purpose and configura
 
 | File | Purpose |
 |---|---|
-| `scripts/project.py` | Cross-platform `doctor`, `setup`, `test`, `run`, `run-warning-demo`, and `data` command-line helper. Both run commands start the dashboard and a simulated feed; the warning demo uses a fast staged feed. |
+| `scripts/project.py` | Cross-platform `doctor`, `setup`, `run`, and `data` command-line helper. The run command starts the dashboard and simulated temperature feed together. |
 | `scripts/generate_scenarios.py` | Deterministically generates the three related synthetic baseline CSV files in `data/`. Despite its historical filename, it writes the baseline files, not separate scenario folders. |
 | `scripts/stream_temperature.py` | Generates and posts simulated temperature readings to the API. The standard `project.py run` command starts it automatically. |
 | `tests/test_api.py` | API routes, frontend delivery, parameter validation, live-reading ingestion, and scenario response checks. |
@@ -122,12 +124,7 @@ Function and endpoint notes use small labels to make their purpose and configura
 | `tests/test_statistics.py` | Known-answer and edge-case checks for temperature, incident, reliability, and financial calculations. |
 | `app/requirements.txt` | Runtime Python dependencies: FastAPI, SciPy, and Uvicorn. |
 | `app/requirements-dev.txt` | Development dependencies; includes runtime requirements plus HTTPX and pytest. |
-| `app/run.sh` | Unix helper that starts Uvicorn from the local virtual environment. |
-| `app/testme.sh` | Unix helper that runs pytest from the local virtual environment. |
-| `Makefile` | Alternative setup, data-generation, test, and run commands for Make users. |
 | `.gitignore` | Excludes local environment, runtime data, and generated files from version control. |
-| `project.Rproj` | RStudio project settings; not required to run the Python dashboard. |
-| `new_file.R` | Auxiliary R/Git example that requests a GitHub token and demonstrates pull/add/commit/push. It is unrelated to the dashboard and is not needed to run it. |
 | `ReadMe.md` | This project overview, dataset codebook, and technical reference. |
 
 Local `.venv/`, Python `__pycache__/` folders, and the SQLite live database are generated/runtime artifacts and are not source datasets.
@@ -236,8 +233,6 @@ The event scenarios retain an **Observed breach in replay** warning after the pl
 
 For an **Unusual temperature pattern**, select **View pattern** in the warning row. BloodWatch selects that refrigerator, scrolls to the existing temperature-history chart, chooses a 6- or 24-hour interval containing the event, and highlights the exact reading or sequence that triggered the rule. The uncluttered overlay uses thin fixed control lines, a baseline-mean line, and emphasized triggering points; unrelated cooling-event markers and in-chart control labels are hidden during review. A compact key, rule, and Eastern Time interval appear below the plot. The highlighted event is stored in browser state, so later dashboard refreshes do not replace it when newer readings arrive. Select **Clear highlight** to return to the normal history plot.
 
-The optional `run-warning-demo` profile replaces only rows from the bundled simulator sources and rotates the first refrigerator through Normal, Warming, Projected crossing, Actual breach, and Recovery. Each stage lasts six seconds; the other refrigerators remain stable. The dashboard refreshes every three seconds. This is a fast synthetic demonstration, not a sensor feed or a prediction of equipment failure.
-
 #### HTTP routes
 
 | Method and path | Inputs | Result |
@@ -287,12 +282,11 @@ This is a practical reference to the callable functions and routes. Private help
 | `run(command, cwd=ROOT, env=None)` | Command as a list of strings; optional working directory and process environment. | Runs a child process, handles Ctrl+C cleanup, and raises `ProjectError` for nonzero exit. |
 | `python_supported()` | No arguments. | `True` for Python 3.12–3.15. |
 | `doctor()` | No arguments. | Prints interpreter/environment checks; returns readiness as a boolean. |
-| `setup()` | No arguments. | Creates `.venv` if needed, installs `app/requirements-dev.txt`, then regenerates the three CSVs. |
+| `setup()` | No arguments. | Creates `.venv` if needed, installs `app/requirements.txt`, then regenerates the three CSVs. |
 | `require_setup()` | No arguments. | Ensures the project virtual environment exists; otherwise raises `ProjectError`. |
-| `test()` | No arguments. | Runs `pytest -q` with `app/` on `PYTHONPATH`. |
-| `serve(simulator_profile="normal")` | Optional `normal` or `warning-cycle` profile. | Starts Uvicorn, waits for `/health`, then starts the matching simulated feed; Ctrl+C stops both processes. |
+| `serve()` | No arguments. | Starts Uvicorn, waits for `/health`, then starts the simulated temperature feed; Ctrl+C stops both processes. |
 | `generate_data()` | No arguments. | Runs `scripts/generate_scenarios.py` using the project environment. |
-| `main()` | CLI action: `doctor`, `setup`, `test`, `run`, `run-warning-demo`, or `data`. | Dispatches the action and returns a process exit code. |
+| `main()` | CLI action: `doctor`, `setup`, `run`, or `data`. | Dispatches the action and returns a process exit code. |
 
 `ProjectError` is the helper's user-facing error type. Run the script as `python scripts/project.py ACTION`.
 
@@ -315,8 +309,7 @@ The constants `REFERENCE`, `BASELINE_START`, `BASELINE_END`, and `REFRIGERATORS`
 | Function | INPUT / PARAMETERS | OUTPUT / behavior |
 |---|---|---|
 | `send_reading(api_url, refrigerator_id, temperature_c, timestamp=None, source="simulator")` | API base URL, known unit ID, temperature, optional aware UTC timestamp and source. | Posts one reading and prints its timestamp, unit, and °C value. |
-| `send_warning_cycle_stage(api_url, refrigerator_ids, stage, temperatures)` | API URL, units, labeled stage, and four temperatures. | Replaces bundled-simulator rows with a repeatable four-reading snapshot for the current stage. |
-| `main()` | Adds `--profile normal|warning-cycle` and `--stage-seconds` to the existing simulator options. | Normal mode stays near 4 °C. Warning-cycle mode repeats five labeled stages; `--once` runs one complete cycle. |
+| `main()` | Supports API URL, interval, refrigerator IDs, and a one-cycle option. | Sends simulated readings near 4 °C until stopped; `--once` sends one cycle. |
 
 #### `app/api.py` — HTTP interface
 

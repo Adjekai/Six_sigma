@@ -3,9 +3,7 @@
 Usage:
     python scripts/project.py doctor
     python scripts/project.py setup
-    python scripts/project.py test
     python scripts/project.py run
-    python scripts/project.py run-warning-demo
     python scripts/project.py data
 """
 
@@ -70,7 +68,7 @@ def doctor() -> bool:
     if VENV_PYTHON.exists():
         print(f"Virtual environment: found at {VENV}")
         check = subprocess.run(
-            [str(VENV_PYTHON), "-c", "import fastapi, scipy, uvicorn, pytest, httpx"],
+            [str(VENV_PYTHON), "-c", "import fastapi, scipy, uvicorn"],
             cwd=ROOT,
             check=False,
         )
@@ -91,7 +89,7 @@ def setup() -> None:
         raise ProjectError("Use Python 3.12 through 3.15; Python 3.14 or 3.15 is recommended.")
     if not VENV_PYTHON.exists():
         run([sys.executable, "-m", "venv", str(VENV)])
-    run([str(VENV_PYTHON), "-m", "pip", "install", "-r", str(ROOT / "app" / "requirements-dev.txt")])
+    run([str(VENV_PYTHON), "-m", "pip", "install", "-r", str(ROOT / "app" / "requirements.txt")])
     run([str(VENV_PYTHON), str(ROOT / "scripts" / "generate_scenarios.py")])
     print("\nSetup complete. Run: python scripts/project.py run")
 
@@ -101,14 +99,7 @@ def require_setup() -> None:
         raise ProjectError("Local Python environment is missing. Run the setup command first.")
 
 
-def test() -> None:
-    require_setup()
-    environment = os.environ.copy()
-    environment["PYTHONPATH"] = str(ROOT / "app")
-    run([str(VENV_PYTHON), "-m", "pytest", "-q"], env=environment)
-
-
-def serve(simulator_profile: str = "normal") -> None:
+def serve() -> None:
     require_setup()
     environment = os.environ.copy()
     environment["PYTHONPATH"] = str(ROOT / "app")
@@ -135,17 +126,10 @@ def serve(simulator_profile: str = "normal") -> None:
 
         print(f"Dashboard ready: {dashboard_url}", flush=True)
         print("Keep this terminal open. Press Ctrl+C to stop.", flush=True)
-        if simulator_profile == "warning-cycle":
-            print("Starting the SYNTHETIC warning-cycle demonstration (each stage lasts 6 seconds).", flush=True)
-        else:
-            print("Starting the normal simulated temperature feed.", flush=True)
+        print("Starting the simulated temperature feed.", flush=True)
         simulator_command = [
-            str(VENV_PYTHON), str(ROOT / "scripts" / "stream_temperature.py")
+            str(VENV_PYTHON), str(ROOT / "scripts" / "stream_temperature.py"), "--interval", "15"
         ]
-        if simulator_profile == "warning-cycle":
-            simulator_command.extend(["--profile", "warning-cycle", "--stage-seconds", "6"])
-        else:
-            simulator_command.extend(["--interval", "15"])
         simulator = subprocess.Popen(
             simulator_command,
             cwd=ROOT,
@@ -179,20 +163,16 @@ def generate_data() -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Set up, check, test, or run BloodWatch on macOS and Windows.")
-    parser.add_argument("action", choices=("doctor", "setup", "test", "run", "run-warning-demo", "data"))
+    parser = argparse.ArgumentParser(description="Set up, check, or run BloodWatch on macOS and Windows.")
+    parser.add_argument("action", choices=("doctor", "setup", "run", "data"))
     arguments = parser.parse_args()
     try:
         if arguments.action == "doctor":
             return 0 if doctor() else 1
         if arguments.action == "setup":
             setup()
-        elif arguments.action == "test":
-            test()
         elif arguments.action == "run":
             serve()
-        elif arguments.action == "run-warning-demo":
-            serve("warning-cycle")
         elif arguments.action == "data":
             generate_data()
     except KeyboardInterrupt:

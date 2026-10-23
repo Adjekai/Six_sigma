@@ -94,9 +94,7 @@ function overview(data) {
     return `<tr><td data-label="Refrigerator"><strong>${esc(refrigeratorName(row.refrigerator_id))}</strong></td><td data-label="Status"><span class="risk-signal risk-signal--${esc(row.status)}">${esc(row.warning_label)}</span>${viewPattern}<details id="risk-row-${esc(row.refrigerator_id)}" class="risk-row-info"><summary>Why this status?</summary><p>${esc(row.decision_support_reason)}</p><p>60-minute estimate: preceding two hours of valid readings · ${num(row.reading_count,0)} readings · ${slope}${row.as_of_utc?` · latest ${esc(fullTimestamp(row.as_of_utc))}`:''}</p></details></td><td data-label="Temperature now → estimated in 60 minutes">${current} → ${projected}</td><td data-label="Recorded inventory">${usd(row.inventory_value_usd)} · ${num(row.inventory_bags,0)} bags</td></tr>`;
   }).join('');
   const flaggedForecasts=data.conditions.temperature_warning_count;
-  const feedLabel=data.dataset.synthetic_warning_cycle_active
-    ? 'Synthetic warning-cycle demonstration · refreshes every 3 s'
-    : `${num(data.dataset.live_reading_count,0)} incoming readings · refreshes every 3 s`;
+  const feedLabel=`${num(data.dataset.live_reading_count,0)} incoming readings · refreshes every 3 s`;
   const selectedRefrigerator=state.refrigeratorId||data.selection.refrigerator_id;
   const highlightedPattern=state.patternHighlight?.refrigerator_id===selectedRefrigerator?state.patternHighlight:null;
   const highlightedPoints=(highlightedPattern?.points||[]).map(point=>({x:Date.parse(point.timestamp_utc),y:point.temperature_c,timestamp:point.timestamp_utc}));
@@ -177,11 +175,9 @@ function liveStatusNote(data) {
   const reference=fullTimestamp(data.dataset.reference_time_utc);
   const ageMinutes=(Date.now()-Date.parse(data.dataset.reference_time_utc))/60000;
   const freshness=Number.isFinite(ageMinutes)?`${num(ageMinutes)} min as of computer time`:'unavailable';
-  const freshnessText=data.dataset.synthetic_warning_cycle_active
-    ? `Synthetic warning-cycle demonstration is active; its latest timestamp is ${reference} and freshness is measured against the actual current time.`
-    : data.dataset.live_reading_count
-      ? `Incoming-feed mode combines the three CSV history datasets with ${data.dataset.live_reading_count} sensor readings; latest data ${reference}. Freshness is measured against the actual current time.`
-      : `No incoming sensor reading is available. Showing the three CSV history datasets through ${reference}; latest reading age ${freshness}.`;
+  const freshnessText=data.dataset.live_reading_count
+    ? `Incoming-feed mode combines the three CSV history datasets with ${data.dataset.live_reading_count} sensor readings; latest data ${reference}. Freshness is measured against the actual current time.`
+    : `No incoming sensor reading is available. Showing the three CSV history datasets through ${reference}; latest reading age ${freshness}.`;
   return `<p class="mode-note">${esc(freshnessText)}</p>`;
 }
 

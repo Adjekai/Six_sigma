@@ -337,7 +337,6 @@ def build_dashboard(
             "synthetic": True,
             "live_reading_count": data["live_reading_count"],
             "live_sources": data.get("live_sources", []),
-            "synthetic_warning_cycle_active": "simulator-warning-cycle" in data.get("live_sources", []),
             "reference_time_utc": reference.isoformat(),
             "freshness_reference_time_utc": freshness_reference.isoformat(),
             "freshness_reference_kind": "replay_reference" if scenario is not None else "current_time",

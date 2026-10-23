@@ -75,27 +75,6 @@ def rejected_reading_summary() -> dict[str, Any]:
     return {"count": sum(row[1] for row in rows), "reasons": [{"reason": row[0], "count": row[1]} for row in rows]}
 
 
-def delete_simulated_temperature_readings(refrigerator_ids: list[str]) -> int:
-    """Delete only rows created by BloodWatch's two bundled simulators."""
-    path = _database_path()
-    if not path.exists() or not refrigerator_ids:
-        return 0
-    placeholders = ",".join("?" for _ in refrigerator_ids)
-    with sqlite3.connect(path, timeout=10) as connection:
-        try:
-            cursor = connection.execute(
-                f"""DELETE FROM temperature_readings
-                    WHERE refrigerator_id IN ({placeholders})
-                    AND source IN ('simulator', 'simulator-warning-cycle')""",
-                refrigerator_ids,
-            )
-        except sqlite3.OperationalError as error:
-            if "no such table" in str(error):
-                return 0
-            raise
-        return cursor.rowcount
-
-
 def load_temperature_readings() -> list[dict[str, Any]]:
     path = _database_path()
     if not path.exists():
