@@ -8,5 +8,6 @@ __pycache__/
 *.py[cod]
 app/frontend/node_modules/
 app/frontend/dist/
+data/*.sqlite3
 .DS_Store
 .pyc

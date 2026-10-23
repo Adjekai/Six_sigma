@@ -145,3 +145,82 @@ def summarize_temperature(
     else:
         result["state"] = "within_limits"
     return result
+
+
+def forecast_temperature_limit_crossing(
+    rows: list[dict[str, Any]],
+    reference_time: datetime,
+    lower_limit_c: float = 1.0,
+    upper_limit_c: float = 6.0,
+    forecast_minutes: float = 60.0,
+    stale_after_minutes: float = 30.0,
+    minimum_readings: int = 4,
+    minimum_span_minutes: float = 30.0,
+) -> dict[str, Any]:
+    valid = sorted(
+        (row for row in rows if row["reading_valid"] and row["temperature_c"] is not None),
+        key=lambda row: row["timestamp"],
+    )
+    result: dict[str, Any] = {
+        "status": "insufficient_data",
+        "forecast_minutes": forecast_minutes,
+        "reading_count": len(valid),
+        "slope_c_per_hour": None,
+        "predicted_minutes_to_limit": None,
+        "projected_temperature_c": None,
+        "warnings": [],
+    }
+    if len(valid) < minimum_readings:
+        result["warnings"].append(warning("FORECAST_INSUFFICIENT_READINGS", "Not enough recent valid readings to estimate a temperature trend.", "info"))
+        return result
+
+    latest = valid[-1]
+    age_minutes = (reference_time - latest["timestamp"]).total_seconds() / 60
+    span_minutes = (latest["timestamp"] - valid[0]["timestamp"]).total_seconds() / 60
+    if age_minutes < 0 or age_minutes > stale_after_minutes:
+        result["status"] = "unknown"
+        result["warnings"].append(warning("FORECAST_STALE_READINGS", "Recent temperature readings are stale; no trend forecast is available."))
+        return result
+    if span_minutes < minimum_span_minutes:
+        result["warnings"].append(warning("FORECAST_SHORT_HISTORY", "Recent readings do not span enough time to estimate a temperature trend.", "info"))
+        return result
+
+    current = float(latest["temperature_c"])
+    if current < lower_limit_c or current > upper_limit_c:
+        result.update({"status": "currently_out_of_range", "projected_temperature_c": current})
+        return result
+
+    elapsed = [(row["timestamp"] - latest["timestamp"]).total_seconds() / 60 for row in valid]
+    values = [float(row["temperature_c"]) for row in valid]
+    mean_elapsed = mean(elapsed)
+    mean_value = mean(values)
+    denominator = sum((value - mean_elapsed) ** 2 for value in elapsed)
+    if denominator == 0:
+        result["warnings"].append(warning("FORECAST_NO_TIME_VARIATION", "Readings have no timestamp variation; no trend forecast is available.", "info"))
+        return result
+    slope_per_minute = sum((time - mean_elapsed) * (value - mean_value) for time, value in zip(elapsed, values)) / denominator
+    slope_per_hour = slope_per_minute * 60
+    projected = current + slope_per_minute * forecast_minutes
+    crossing_minutes = None
+    if slope_per_minute > 0 and projected > upper_limit_c:
+        crossing_minutes = (upper_limit_c - current) / slope_per_minute
+    elif slope_per_minute < 0 and projected < lower_limit_c:
+        crossing_minutes = (lower_limit_c - current) / slope_per_minute
+
+    status = "approaching_limit" if crossing_minutes is not None else "within_limits"
+    result.update(
+        {
+            "status": status,
+            "slope_c_per_hour": slope_per_hour,
+            "predicted_minutes_to_limit": crossing_minutes,
+            "projected_temperature_c": projected,
+        }
+    )
+    if crossing_minutes is not None:
+        result["warnings"].append(
+            warning(
+                "PREDICTED_STORAGE_LIMIT_CROSSING",
+                f"Recent temperature trend projects crossing the storage limit in about {crossing_minutes:.0f} minutes; verify the sensor and inspect cooling equipment.",
+            )
+        )
+    return result

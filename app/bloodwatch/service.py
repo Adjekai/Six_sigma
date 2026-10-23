@@ -6,7 +6,7 @@ from typing import Any
 from .incidents import summarize_breach_and_recovery
 from .reliability import generator_reliability, refrigerator_reliability
 from .repository import load_data
-from .temperature import analyze_temperature_process, summarize_temperature
+from .temperature import analyze_temperature_process, forecast_temperature_limit_crossing, summarize_temperature
 
 
 def _equipment(periods: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -89,10 +89,38 @@ def build_dashboard(
     all_warnings: list[dict[str, str]] = []
 
     equipment_status = []
+    risk_forecasts = []
     selected_summary = None
     for refrigerator in equipment:
         rows = [row for row in window_temperatures if row["refrigerator_id"] == refrigerator["equipment_id"]]
         summary = summarize_temperature(rows, reference, lower_limit_c, upper_limit_c)
+        recent_rows = [
+            row for row in temperatures
+            if row["refrigerator_id"] == refrigerator["equipment_id"]
+            and reference - timedelta(hours=2) <= row["timestamp"] <= reference
+        ]
+        forecast = forecast_temperature_limit_crossing(
+            recent_rows, reference, lower_limit_c, upper_limit_c
+        )
+        inventory_value = (
+            refrigerator["current_bags"] * refrigerator["value_per_bag_usd"]
+            if refrigerator["value_per_bag_usd"] is not None else None
+        )
+        risk_forecast = {
+            "refrigerator_id": refrigerator["equipment_id"],
+            "status": forecast["status"],
+            "forecast_minutes": forecast["forecast_minutes"],
+            "reading_count": forecast["reading_count"],
+            "slope_c_per_hour": forecast["slope_c_per_hour"],
+            "predicted_minutes_to_limit": forecast["predicted_minutes_to_limit"],
+            "projected_temperature_c": forecast["projected_temperature_c"],
+            "current_temperature_c": summary["latest_temperature_c"],
+            "inventory_bags": refrigerator["current_bags"],
+            "inventory_value_usd": inventory_value,
+            "warnings": forecast["warnings"],
+        }
+        risk_forecasts.append(risk_forecast)
+        all_warnings.extend(forecast["warnings"])
         if refrigerator["equipment_id"] == refrigerator_id:
             selected_summary = summary
         active = [
@@ -103,8 +131,15 @@ def build_dashboard(
         ]
         if summary["state"] == "unknown":
             status, reasons = "unknown", ["Latest temperature condition is unknown"]
-        elif active or summary["state"] in {"below_limit", "above_limit"}:
-            status, reasons = "review_required", ["Cooling or temperature requires review"]
+        elif active or summary["state"] in {"below_limit", "above_limit"} or forecast["status"] == "approaching_limit":
+            status = "review_required"
+            reasons = []
+            if active:
+                reasons.append("Cooling interruption is active")
+            if summary["state"] in {"below_limit", "above_limit"}:
+                reasons.append("Latest valid temperature is outside storage limits")
+            if forecast["status"] == "approaching_limit":
+                reasons.append("Recent temperature trend projects a storage-limit crossing")
         else:
             status, reasons = "within_limits", ["Latest valid reading is within configured limits"]
         equipment_status.append(
@@ -117,6 +152,7 @@ def build_dashboard(
                 "latest_timestamp_utc": summary["latest_timestamp_utc"],
                 "freshness_minutes": summary["freshness_minutes"],
                 "incident_status": "active" if active else "none_active",
+                "temperature_risk_status": forecast["status"],
                 "alert_reasons": reasons,
             }
         )
@@ -202,6 +238,7 @@ def build_dashboard(
         "dataset": {
             "name": "Blood bank equipment history",
             "synthetic": True,
+            "live_reading_count": data["live_reading_count"],
             "reference_time_utc": reference.isoformat(),
         },
         "selection": {
@@ -214,6 +251,7 @@ def build_dashboard(
             "temperature_summary": selected_summary,
             "temperature_series": selected_series,
             "equipment": equipment_status,
+            "risk_forecasts": risk_forecasts,
             "inventory_summary": {
                 "bags_present": sum(row["bags_present"] for row in inventory_rows),
                 "lot_count": sum(row["lot_count"] for row in inventory_rows),

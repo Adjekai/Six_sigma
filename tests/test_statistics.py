@@ -6,7 +6,7 @@ import pytest
 from bloodwatch.financial import expected_annual_blackout_loss
 from bloodwatch.incidents import summarize_breach_and_recovery
 from bloodwatch.reliability import generator_reliability, refrigerator_reliability
-from bloodwatch.temperature import summarize_temperature
+from bloodwatch.temperature import forecast_temperature_limit_crossing, summarize_temperature
 
 
 UTC = timezone.utc
@@ -86,6 +86,22 @@ def test_missing_temperature_is_unknown_not_zero():
     result = summarize_temperature([reading(0, None, valid=False)], reference)
     assert result["state"] == "unknown"
     assert result["latest_temperature_c"] is None
+
+
+def test_temperature_forecast_flags_limit_crossing():
+    reference = datetime(2026, 1, 1, 0, 45, tzinfo=UTC)
+    rows = [reading(minutes, temperature) for minutes, temperature in ((0, 4.0), (15, 4.5), (30, 5.0), (45, 5.5))]
+    result = forecast_temperature_limit_crossing(rows, reference)
+    assert result["status"] == "approaching_limit"
+    assert result["predicted_minutes_to_limit"] == pytest.approx(15)
+    assert result["projected_temperature_c"] == pytest.approx(7.5)
+
+
+def test_temperature_forecast_requires_fresh_sufficient_data():
+    reference = datetime(2026, 1, 1, 2, 0, tzinfo=UTC)
+    rows = [reading(minutes, 4.0) for minutes in (0, 15, 30, 45)]
+    assert forecast_temperature_limit_crossing(rows, reference)["status"] == "unknown"
+    assert forecast_temperature_limit_crossing(rows[:3], reference)["status"] == "insufficient_data"
 
 
 def test_breach_detection_and_recovery_are_distinct():

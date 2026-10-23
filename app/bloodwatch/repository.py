@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .common import parse_utc
+from .live_data import load_temperature_readings
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -21,6 +22,10 @@ def _read_csv(name: str) -> list[dict[str, str]]:
         raise DatasetError(f"Missing dataset: {name}")
     with path.open(newline="", encoding="utf-8") as handle:
         return list(csv.DictReader(handle))
+
+
+def known_refrigerator_ids() -> set[str]:
+    return {row["refrigerator_id"] for row in _read_csv("refrigerator_failures.csv")}
 
 
 def _optional_time(value: str) -> Any:
@@ -49,6 +54,9 @@ def load_data() -> dict[str, Any]:
     }
     _coerce(data)
     _validate(data)
+    live_readings = load_temperature_readings()
+    data["live_reading_count"] = len(live_readings)
+    data["temperatures"].extend(live_readings)
     operational = [row["timestamp"] for row in data["temperatures"] if not _is_baseline_reading(row, data)]
     data["reference_time"] = max(operational)
     return data

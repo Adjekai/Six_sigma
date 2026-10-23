@@ -17,6 +17,30 @@ Python 3.12–3.15 is required.
 
 Open <http://127.0.0.1:8000>. Press `Ctrl+C` in the same terminal to stop the server.
 
+## Live temperature feed
+
+Start the dashboard, then run the bundled simulator in another terminal:
+
+```sh
+python scripts/stream_temperature.py --interval 15
+```
+
+It sends one simulated reading per refrigerator every 15 seconds. The dashboard reloads automatically every 15 seconds. Simulator values are for demonstration only; they are not sensor measurements.
+
+Real sensor software can send readings to `POST /api/readings` as JSON:
+
+```json
+{
+	"refrigerator_id": "R1",
+	"timestamp_utc": "2026-10-22T12:00:00Z",
+	"temperature_c": 4.2,
+	"reading_valid": true,
+	"source": "logger-01"
+}
+```
+
+The refrigerator ID must already exist in the equipment dataset. Timestamps must include a timezone; invalid readings should use `"temperature_c": null` and `"reading_valid": false`. Readings are saved in `data/live_readings.sqlite3` and merged with the sample history. Set `BLOODWATCH_LIVE_DB` to use a different SQLite file. The API currently binds to localhost and has no sensor authentication; do not expose it to a network until authentication and transport security are configured.
+
 ## Overview
 
 Each folder under `data/scenarios/` contains five CSV files and `metadata.json`. Every scenario has three refrigerators and one shared backup generator.
