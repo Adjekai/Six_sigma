@@ -14,6 +14,9 @@ import argparse
 import os
 import subprocess
 import sys
+import time
+from urllib.error import URLError
+from urllib.request import urlopen
 from pathlib import Path
 
 
@@ -108,10 +111,50 @@ def serve() -> None:
     require_setup()
     environment = os.environ.copy()
     environment["PYTHONPATH"] = str(ROOT / "app")
-    run(
+    server = subprocess.Popen(
         [str(VENV_PYTHON), "-m", "uvicorn", "api:app", "--host", "127.0.0.1", "--port", "8000"],
+        cwd=ROOT,
         env=environment,
     )
+    simulator: subprocess.Popen | None = None
+    try:
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            if server.poll() is not None:
+                raise ProjectError(f"Dashboard server exited with code {server.returncode}.")
+            try:
+                with urlopen("http://127.0.0.1:8000/health", timeout=1):
+                    break
+            except (URLError, TimeoutError):
+                time.sleep(0.25)
+        else:
+            raise ProjectError("Dashboard server did not become ready within 30 seconds.")
+
+        print("Dashboard ready. Starting the simulated temperature feed.", flush=True)
+        simulator = subprocess.Popen(
+            [str(VENV_PYTHON), str(ROOT / "scripts" / "stream_temperature.py"), "--interval", "15"],
+            cwd=ROOT,
+            env=environment,
+        )
+        while True:
+            if server.poll() is not None:
+                raise ProjectError(f"Dashboard server exited with code {server.returncode}.")
+            if simulator.poll() is not None:
+                raise ProjectError(f"Temperature simulator exited with code {simulator.returncode}.")
+            time.sleep(0.25)
+    except KeyboardInterrupt:
+        print("\nStopping dashboard and simulated temperature feed.", flush=True)
+    finally:
+        for process in (simulator, server):
+            if process is not None and process.poll() is None:
+                process.terminate()
+        for process in (simulator, server):
+            if process is not None:
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
 
 
 def generate_data() -> None:

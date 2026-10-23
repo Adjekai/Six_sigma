@@ -43,15 +43,9 @@ Python 3.12–3.15 is supported; Python 3.14 or 3.15 is recommended.
 | Run the automated checks | `python3 scripts/project.py test` | `py scripts\project.py test` |
 | Regenerate the three baseline CSV files | `python3 scripts/project.py data` | `py scripts\project.py data` |
 
-Open <http://127.0.0.1:8000>. Stop the server with Ctrl+C in its terminal.
+Open <http://127.0.0.1:8000>. The `run` command starts the dashboard and a simulated temperature feed together. It sends one reading for each refrigerator every 15 seconds, so the incoming-reading count updates automatically. Stop both with Ctrl+C in the terminal.
 
-To send simulated readings from another terminal while the dashboard is running:
-
-```sh
-python scripts/stream_temperature.py --interval 15
-```
-
-The simulator sends one reading for each selected refrigerator per cycle. Options include `--api-url`, `--interval`, `--refrigerators`, and `--once`; see the function and CLI reference below.
+The feed is synthetic demo data stored in the local SQLite database. Each checkout maintains its own database. To run the simulator separately or change its interval, use `python scripts/stream_temperature.py`; options include `--api-url`, `--interval`, `--refrigerators`, and `--once`.
 
 ### Important assumptions and limitations
 
@@ -117,7 +111,7 @@ Function and endpoint notes use small labels to make their purpose and configura
 |---|---|
 | `scripts/project.py` | Cross-platform `doctor`, `setup`, `test`, `run`, and `data` command-line helper. |
 | `scripts/generate_scenarios.py` | Deterministically generates the three related synthetic baseline CSV files in `data/`. Despite its historical filename, it writes the baseline files, not separate scenario folders. |
-| `scripts/stream_temperature.py` | Generates and posts simulated temperature readings to the API. |
+| `scripts/stream_temperature.py` | Generates and posts simulated temperature readings to the API. The standard `project.py run` command starts it automatically. |
 | `tests/test_api.py` | API routes, frontend delivery, parameter validation, live-reading ingestion, and scenario response checks. |
 | `tests/test_class_dashboard.py` | Dataset relationships, dashboard response shape, incident timing, selected refrigerator behavior, and baseline process-analysis behavior. |
 | `tests/test_scenarios.py` | Scenario construction, synthetic event behavior, and the effect of live readings on live versus replay data. |
