@@ -16,16 +16,18 @@ def test_dashboard_frontend_is_served_without_a_build_step():
     response = client.get("/")
     assert response.status_code == 200
     assert "BloodWatch" in response.text
-    assert "/app.js?v=scenario-mode-1" in response.text
+    assert "/app.js?v=scenario-mode-2" in response.text
     frontend = client.get("/app.js").text
     assert "loadDashboard" in frontend
     assert "Data limitations" not in frontend
-    assert "Live history (opt in)" in frontend
-    assert "Demo scenario / data mode" in frontend
+    assert "Live history" in frontend
+    assert "Scenario / data mode" in frontend
     assert "Computer current time" in frontend
     assert "Dataset reference" in frontend
     assert "Methods and details" in frontend
-    assert "Demo data as of" in frontend
+    assert "Scenario data as of" in frontend
+    assert "Storage limit information" in frontend
+    assert "Recommended ranges" in frontend
     assert "row.reading_count" in frontend
     assert "row.slope_c_per_hour" in frontend
     assert "fullTimestamp(row.as_of_utc)" in frontend
@@ -59,7 +61,7 @@ def test_dashboard_exposes_temperature_risk_and_inventory_exposure():
     assert all("reading_count" in row and "slope_c_per_hour" in row for row in forecasts)
 
 
-def test_scenario_endpoint_lists_the_three_dataset_demos():
+def test_scenario_endpoint_lists_the_three_scenarios():
     response = client.get("/api/scenarios")
     assert response.status_code == 200
     assert [row["id"] for row in response.json()] == [
@@ -148,7 +150,7 @@ def test_dashboard_controls_have_intermediate_responsive_layout():
     assert "@media (min-width: 641px) and (max-width: 900px)" in css
 
 
-def test_demo_scenario_uses_csvs_without_live_rows_and_live_mode_still_includes_them(tmp_path, monkeypatch):
+def test_scenario_uses_csvs_without_live_rows_and_live_mode_still_includes_them(tmp_path, monkeypatch):
     monkeypatch.setenv("BLOODWATCH_LIVE_DB", str(tmp_path / "live.sqlite3"))
     payload = {
         "refrigerator_id": "R1",
@@ -160,16 +162,16 @@ def test_demo_scenario_uses_csvs_without_live_rows_and_live_mode_still_includes_
     assert client.post("/api/readings", json=payload).status_code == 201
 
     live = client.get("/api/dashboard", params={"refrigerator_id": "R1"}).json()
-    demo = client.get("/api/dashboard", params={"scenario": "stable"}).json()
+    scenario_result = client.get("/api/dashboard", params={"scenario": "stable"}).json()
 
     assert live["dataset"]["live_reading_count"] == 1
     assert live["conditions"]["temperature_summary"]["latest_temperature_c"] == 4.6
-    assert demo["dataset"]["live_reading_count"] == 0
-    assert demo["scenario"]["synthetic_demo"] is True
-    assert demo["scenario"]["id"] == "stable"
+    assert scenario_result["dataset"]["live_reading_count"] == 0
+    assert scenario_result["scenario"]["synthetic_data"] is True
+    assert scenario_result["scenario"]["id"] == "stable"
 
 
-def test_unknown_demo_scenario_is_rejected():
+def test_unknown_scenario_is_rejected():
     response = client.get("/api/dashboard", params={"scenario": "not-a-scenario"})
     assert response.status_code == 400
-    assert "Unknown demo scenario" in response.json()["detail"]
+    assert "Unknown scenario" in response.json()["detail"]

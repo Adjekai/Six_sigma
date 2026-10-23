@@ -25,7 +25,7 @@ Start the dashboard, then run the bundled simulator in another terminal:
 python scripts/stream_temperature.py --interval 15
 ```
 
-It sends one simulated reading per refrigerator every 15 seconds. The dashboard reloads automatically every 15 seconds. Simulator values are for demonstration only; they are not sensor measurements.
+It sends one simulated reading per refrigerator every 15 seconds. The dashboard reloads automatically every 15 seconds. Simulator values are synthetic; they are not sensor measurements.
 
 Real sensor software can send readings to `POST /api/readings` as JSON:
 
@@ -51,7 +51,7 @@ BloodWatch uses three related CSV datasets as its equipment and history baseline
 
 The dashboard opens in **Live data** mode. It uses the three CSV datasets and overlays readings received at `POST /api/readings` from the SQLite live feed. The bundled `scripts/stream_temperature.py` producer is simulated; use a real logger adapter to send actual readings.
 
-The Data mode selector also offers three reproducible synthetic demonstrations: Stable conditions, Degrading refrigerator, and Blackout with failed generator. These scenarios are generated from the same three CSV datasets and are clearly labeled synthetic. They do not use or overwrite live SQLite readings. Return to **Live data** to see the sensor feed.
+The Data mode selector also offers three reproducible synthetic scenarios: Stable conditions, Degrading refrigerator, and Blackout with failed generator. These scenarios are generated from the same three CSV datasets and are clearly labeled synthetic. They do not use or overwrite live SQLite readings. Return to **Live data** to see the sensor feed.
 
 ## Overview
 
@@ -98,7 +98,7 @@ Current inventory and historical incident outcomes. Real sources would be invent
 | `lot_id` | Blood lot identifier used to prevent double counting |
 | `refrigerator_id` | Refrigerator holding the inventory |
 | `bags_present` | Bags stored or involved |
-| `value_per_bag_usd` | Demonstration value per bag; blank if unknown |
+| `value_per_bag_usd` | Assumed value per bag; blank if unknown |
 | `bags_transferred` | Bags moved after an incident; blank if unknown or not applicable |
 | `bags_written_off` | Bags confirmed written off; blank if unknown or not applicable |
 

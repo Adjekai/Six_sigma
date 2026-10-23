@@ -358,11 +358,11 @@ def build_dashboard(
         scenario_info = {
             "id": scenario,
             **SCENARIOS[scenario],
-            "synthetic_demo": True,
+            "synthetic_data": True,
             "observed_alarm": None,
         }
         if scenario in {"degrading_refrigerator", "blackout_failed_generator"}:
-            event_id = "DEMO-RF-001" if scenario == "degrading_refrigerator" else "DEMO-GF-001"
+            event_id = "SIM-RF-001" if scenario == "degrading_refrigerator" else "SIM-GF-001"
             event = next(
                 row for row in breach_recovery["incidents"]
                 if row["failure_event_id"] == event_id

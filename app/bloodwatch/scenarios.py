@@ -82,12 +82,12 @@ def _event_data(source: dict[str, Any], scenario: str) -> dict[str, Any]:
     reference = source["reference_time"] + timedelta(hours=12)
     cooling_loss = reference - timedelta(hours=5)
     if scenario == "degrading_refrigerator":
-        event_id = "DEMO-RF-001"
+        event_id = "SIM-RF-001"
         restored = reference - timedelta(hours=2)
         affected_refrigerator = "R1"
         data["refrigerator_periods"].append(
             {
-                "operating_period_id": "OP-R1-DEMO",
+                "operating_period_id": "OP-R1-SIM",
                 "refrigerator_id": affected_refrigerator,
                 "site_id": "BLOOD-BANK-1",
                 "model_group": "CW-100",
@@ -107,7 +107,7 @@ def _event_data(source: dict[str, Any], scenario: str) -> dict[str, Any]:
         )
         affected_refrigerators = {affected_refrigerator}
     else:
-        event_id = "DEMO-GF-001"
+        event_id = "SIM-GF-001"
         restored = reference - timedelta(hours=1)
         affected_refrigerator = None
         data["generator_demands"].append(
@@ -154,7 +154,7 @@ def _event_data(source: dict[str, Any], scenario: str) -> dict[str, Any]:
 def load_scenario_data(source: dict[str, Any], scenario: str) -> dict[str, Any]:
     if scenario not in SCENARIOS:
         choices = ", ".join(SCENARIOS)
-        raise ValueError(f"Unknown demo scenario: {scenario}. Choose one of: {choices}")
+        raise ValueError(f"Unknown scenario: {scenario}. Choose one of: {choices}")
     if scenario == "stable":
         return _stable_data(source)
     return _event_data(source, scenario)
