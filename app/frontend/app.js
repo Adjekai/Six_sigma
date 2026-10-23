@@ -89,9 +89,6 @@ function overview(data) {
     return `<tr><td data-label="Refrigerator"><strong>${esc(refrigeratorName(row.refrigerator_id))}</strong></td><td data-label="Status"><span class="risk-signal risk-signal--${esc(row.status)}">${esc(signal)}</span><details id="risk-row-${esc(row.refrigerator_id)}" class="risk-row-info"><summary>Why this status?</summary><p>${esc(row.decision_support_reason)}</p><p>Trend estimate uses ${num(row.reading_count,0)} readings · ${slope}${row.as_of_utc?` · ${esc(fullTimestamp(row.as_of_utc))}`:''}</p></details></td><td data-label="Temperature now → projected">${current} → ${projected}</td><td data-label="Inventory at this unit">${usd(row.inventory_value_usd)} · ${num(row.inventory_bags,0)} bags</td></tr>`;
   }).join('');
   const flaggedForecasts=riskForecasts.filter(row=>['approaching_limit','currently_out_of_range'].includes(row.status)).length;
-  const generatorRisk=data.reliability.selected_generator;
-  const generatorRiskText=generatorRisk.failed_start_probability==null?'Not enough known blackout demands':`${pct(generatorRisk.failed_start_probability)} estimated per blackout`;
-  const generatorInterval=generatorRisk.wilson_interval_95.lower==null?'uncertainty unavailable':`95% interval ${pct(generatorRisk.wilson_interval_95.lower)}–${pct(generatorRisk.wilson_interval_95.upper)}`;
   const overviewPanel=`<section class="ops-summary" aria-label="Supply status">
     <div class="summary-heading"><div><p class="eyebrow">Regional blood storage</p><h2>Blood supply overview</h2></div><span class="live-indicator"><i></i>${num(data.dataset.live_reading_count,0)} incoming readings · refreshes every 15 s</span></div>
     <div class="summary-strip">
@@ -140,24 +137,6 @@ function overview(data) {
       ${card('Average hours between failures',fridge.mtbf_hours==null?'Not estimable':`${num(fridge.mtbf_hours,0)} hours`,fridge.mtbf_hours==null?'No failures observed; the uncertainty range remains available':'Historical average, not a service-life guarantee')}
       ${card('Backup generator uncertainty',`${pct(generator.wilson_interval_95.lower)}–${pct(generator.wilson_interval_95.upper)}`,'95% failed-start interval')}
     </div>
-  </section></section></details>
-  <details id="process-details" class="analysis-details"><summary><span>Temperature patterns and calculation methods</span><small>${process.capability_status==='estimated'?'Performance estimate available':'More baseline data needed'}</small></summary><section class="details-content"><section class="panel">${sectionTitle('Temperature process analysis')}
-    <div class="metric-grid three">
-      ${card('Baseline sigma',process.within_sigma_c==null?'Unavailable':`${num(process.within_sigma_c,3)} °C`,'MR-bar estimator: average moving range ÷ 1.128')}
-      ${card('Control limits',process.lower_control_limit_c==null?'Unavailable':`${num(process.lower_control_limit_c)}–${num(process.upper_control_limit_c)} °C`,`${process.baseline_count} fixed normal-baseline readings`)}
-      ${card('Control signals',process.out_of_control_count==null?'Unavailable':num(process.out_of_control_count,0),'Points outside control limits')}
-      ${card('Observed out of specification',process.observed_out_of_spec_percent==null?'Unavailable':`${num(process.observed_out_of_spec_percent,2)}%`,`Normal-theory estimate ${num(process.normal_theory_out_of_spec_percent,2)}%`)}
-      ${card('Ppk',process.capability_status==='insufficient_data'?'Not enough data':num(process.ppk),'Overall performance')}
-      ${card('Cp / Cpk',`${num(process.cp)} / ${num(process.cpk)}`,'Potential when running normally · fixed baseline')}
-    </div>
-    ${process.lower_control_limit_c==null?'':lineChart(series,{label:'Individuals control chart with cooling-loss events',xLabel:'Recorded time (UTC)',yLabel:'Temperature (°C)',lower:process.lower_control_limit_c,upper:process.upper_control_limit_c,center:process.center_line_c,limitText:'control limit',markers:coolingMarkers})}
-    <p class="plain-note">Control limits: fixed normal behavior · Storage specifications: ${s.lower_limit_c}–${s.upper_limit_c} °C</p>
-    <p class="plain-note">${esc(process.capability_explanation)}</p>
-    <p class="plain-note">${esc(process.autocorrelation_note||'')} Shapiro–Wilk p=${num(process.normality_p_value,4)} (up to 5,000 points).</p>
-    ${process.moving_range_series?.length?lineChart(process.moving_range_series.map((point,index)=>({x:index,y:point.moving_range_c})),{label:'Moving range control chart; upper limit 3.267 times average moving range',xLabel:'Baseline reading index',yLabel:'Moving range (C)',upper:process.moving_range_ucl_c,limitText:'UCL'}):''}
-    <p class="plain-note">Control rules: ${process.control_signals?.length?process.control_signals.map(signal=>`${esc(signal.rule)} at point ${signal.index+1}`).join('; '):'none fired'} · moving-range UCL ${num(process.moving_range_ucl_c)} °C.</p>
-    <p class="plain-note">Baseline-history reliability estimate: ${num(fridge.failures)} failures in ${num(fridge.exposure_hours,0)} operating hours · F(30 d) ${pct(fridge.failure_probability)} (95% ${pct(fridge.failure_probability_interval_95.lower)}–${pct(fridge.failure_probability_interval_95.upper)}). ${esc(fridge.assumptions.join('; '))}</p>
-    <p class="plain-note">Generator ${esc(generatorRisk.generator_id)} Wilson 95% interval ${generatorInterval}; estimated loss ${usd(data.financial_estimates.generator_expected_loss_per_blackout_usd)}/blackout. Upper case ${usd(data.financial_estimates.generator_wilson_upper_case_usd)} assumes a failed start and outage past observed limit crossing; not an annual-loss prediction.</p>
   </section></section></details>
   `;
   return {overviewPanel,sections};
