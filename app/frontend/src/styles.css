@@ -126,9 +126,9 @@ button:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visib
 .risk-watch h3 { margin: 2px 0 5px; font-size: .95rem; }
 .risk-watch p, .generator-summary { margin: 0; color: #596c69; font-size: .8rem; line-height: 1.5; }
 .warning-count { color: #374a43; font-size: .82rem; }
-.risk-info { margin-top: 7px; color: #526a65; font-size: .72rem; }
+.risk-info { max-width: 150px; margin-top: 7px; color: #526a65; font-size: .7rem; }
 .risk-info summary { width: fit-content; color: #42655e; }
-.risk-info p { min-width: 180px; margin-top: 6px; }
+.risk-info p { min-width: 0; margin-top: 5px; line-height: 1.4; overflow-wrap: anywhere; }
 .risk-watch table { table-layout: fixed; font-size: .78rem; }
 .risk-watch th:nth-child(1) { width: 19%; }
 .risk-watch th:nth-child(2) { width: 25%; }
@@ -177,6 +177,7 @@ button:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visib
 	.summary-strip > div:nth-child(3), .summary-strip > div:nth-child(4) { border-top: 1px solid #e5dcda; }
 	.summary-strip > div:nth-child(3) { padding-left: 0; }
 	.risk-watch { grid-template-columns: 1fr; gap: 8px; }
+	.risk-info { max-width: none; }
 	.risk-watch .table-wrap { overflow: visible; }
 	.risk-watch table, .risk-watch tbody { display: block; width: 100%; }
 	.risk-watch thead { display: none; }
@@ -335,6 +336,11 @@ footer { color: #71817b; }
 .welcome-note details { flex:0 0 36%; margin:0; }
 .welcome-note summary { width:fit-content; color:#245e49; font-weight:750; }
 .welcome-note details p { margin:7px 0 0; color:#536b60; font-size:.78rem; }
+.data-source-information { flex:0 0 40%; margin:0; padding:0 0 0 12px; border:0; border-left:2px solid #9db9a7; border-radius:0; background:transparent; color:#536b60; font-size:.76rem; }
+.data-source-information > summary { width:fit-content; color:#245e49; font-weight:750; }
+.data-source-information > div { margin-top:7px; padding-top:0; border-top:0; }
+.data-source-information p { margin:0; line-height:1.55; }
+.data-source-information p + p { margin-top:7px; }
 .ops-summary { padding:20px 22px; }
 .summary-strip strong { font-size:1.25rem; }
 .analysis-details > summary { min-height:52px; }

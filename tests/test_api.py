@@ -16,28 +16,29 @@ def test_dashboard_frontend_is_served_without_a_build_step():
     response = client.get("/")
     assert response.status_code == 200
     assert "BloodWatch" in response.text
-    assert "/app.js?v=combined-dashboard-2" in response.text
+    assert "/app.js?v=hide-rejections-1" in response.text
     frontend = client.get("/app.js").text
     assert "loadDashboard" in frontend
+    assert "About the datasets and live readings" in frontend
+    assert "Live readings</strong> are sensor readings stored in the local database" in frontend
+    assert "Rejected readings:" not in frontend
     assert "Data limitations" not in frontend
-    assert "Demo scenario / data mode" in frontend
+    assert "CSV history + incoming readings" in frontend
+    assert "Synthetic demo scenarios" in frontend
     assert "state = { mode: 'live'" in frontend
-    assert "Storage limit information" in frontend
-    assert "Import temperature CSV" in frontend
-    assert "Computer current time" in frontend
-    assert "Dataset reference" in frontend
-    assert "Methods and details" in frontend
+    assert "Change analysis limits and estimate period" in frontend
+    assert "Examples of product storage ranges" in frontend
+    assert "Computer local time" in frontend
+    assert "Data timestamp (UTC)" in frontend
     assert "Scenario data as of" in frontend
-    assert "Storage limit information" in frontend
-    assert "Recommended ranges" in frontend
     assert "row.reading_count" in frontend
     assert "row.slope_c_per_hour" in frontend
     assert "fullTimestamp(row.as_of_utc)" in frontend
-    assert "About alerts" in frontend
+    assert "What do the warnings mean?" in frontend
     assert "class=\"risk-row-info\"" in frontend
-    assert "card('Observed out of specification'" in frontend
+    assert "card('Overall temperature performance'" in frontend
     assert "card('Ppk / observed out-of-spec'" not in frontend
-    assert "Degrading refrigerator" in frontend
+    assert "Refrigerator cooling failure" in frontend
 
 
 def test_dashboard_uses_coherent_dataset():
