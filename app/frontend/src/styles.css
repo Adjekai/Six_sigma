@@ -141,6 +141,7 @@ button:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visib
 .forecast-details p { margin: 4px 0 0; color: #61736e; font-size: .68rem; line-height: 1.45; }
 .risk-signal { display: inline-block; padding: 4px 7px; border-radius: 4px; background: #e7f3ec; color: #246247; font-size: .75rem; font-weight: 700; white-space: nowrap; }
 .risk-signal--approaching_limit, .risk-signal--currently_out_of_range { background: #fff0e5; color: #96471f; }
+.risk-signal--unusual_pattern { background:#fff8db; color:#755b0b; }
 .risk-signal--unknown, .risk-signal--insufficient_data { background: #edf0ef; color: #5e6b68; }
 .risk-row-info { margin: 6px 0 0; color: #526a65; font-size: .7rem; }
 .risk-row-info summary { width: fit-content; color: #42655e; font-weight: 700; }
@@ -151,6 +152,9 @@ button:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visib
 .secondary-details .table-wrap { margin-top: 8px; }
 .temperature-panel { padding: 18px 20px 14px; border-color: #d9c9c8; border-radius: 7px; }
 .temperature-heading { margin-bottom: 10px; }
+.temperature-controls { display:flex; flex-wrap:wrap; gap:10px 14px; margin:0 0 12px; padding:10px 12px; border:1px solid #dce5e0; border-radius:5px; background:#f8faf8; }
+.temperature-controls label { display:grid; flex:1 1 220px; gap:4px; color:#536a63; font-size:.7rem; font-weight:700; }
+.temperature-controls select { min-height:36px; padding:7px 9px; border:1px solid #cbd8d2; border-radius:5px; background:#fff; color:#233d39; font:inherit; font-size:.82rem; }
 .condition-tag { padding: 5px 9px; border-radius: 4px; background: #e3f2ea; color: #216346; font-size: .72rem; font-weight: 750; }
 .condition-tag--unknown, .condition-tag--below_limit, .condition-tag--above_limit { background: #fff0e9; color: #913f29; }
 .temperature-panel > .metric-grid { margin-bottom: 2px; }
@@ -304,7 +308,7 @@ main { max-width: 1160px; padding-top: 20px; }
 .masthead h1 { margin: 0; color: #fff; font-size: 2.45rem; letter-spacing: 0; }
 .masthead .eyebrow { margin: 0 0 3px; color: #a9d2bd; font-size: .66rem; }
 .masthead-site { color: #c4d8cf; font-size: .78rem; font-weight: 650; }
-.controls { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 11px 14px; align-items: end; margin: 0 0 8px; padding: 15px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); box-shadow: 0 2px 10px rgb(32 59 55 / 4%); }
+.controls { display: grid; grid-template-columns: minmax(260px, 420px); gap: 11px 14px; align-items: end; margin: 0 0 8px; padding: 15px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); box-shadow: 0 2px 10px rgb(32 59 55 / 4%); }
 .controls label { min-width: 0; color: #536a63; font-size: .7rem; letter-spacing: .025em; }
 .controls select, .controls input { width: 100%; min-width: 0; min-height: 40px; margin-top: 2px; padding: 8px 10px; border: 1px solid #cbd8d2; border-radius: 5px; background: #fbfdfb; color: var(--ink); font-size: .84rem; font-weight: 600; }
 .controls .mode-select { border-color: #8ab4a0; background: #edf7f1; color: #15543f; font-weight: 750; }

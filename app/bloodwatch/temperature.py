@@ -189,7 +189,7 @@ def summarize_temperature(
             "standard_deviation_c": stdev(values) if len(values) > 1 else None,
         }
     )
-    if freshness > stale_after_minutes:
+    if freshness < 0 or freshness > stale_after_minutes:
         result["state"] = "unknown"
         result["warnings"].append(warning("STALE_TEMPERATURE", "The latest valid reading is stale."))
     elif latest["temperature_c"] < lower_limit_c:
@@ -227,24 +227,29 @@ def forecast_temperature_limit_crossing(
     }
     if valid:
         result["as_of_utc"] = valid[-1]["timestamp"].isoformat()
-    if len(valid) < minimum_readings:
-        result["warnings"].append(warning("FORECAST_INSUFFICIENT_READINGS", "Not enough recent valid readings to estimate a temperature trend.", "info"))
+    if not valid:
+        result["status"] = "unknown"
+        result["warnings"].append(warning("FORECAST_NO_VALID_READINGS", "No valid current reading is available; no trend forecast is available."))
         return result
 
     latest = valid[-1]
     age_minutes = (reference_time - latest["timestamp"]).total_seconds() / 60
-    span_minutes = (latest["timestamp"] - valid[0]["timestamp"]).total_seconds() / 60
     if age_minutes < 0 or age_minutes > stale_after_minutes:
         result["status"] = "unknown"
         result["warnings"].append(warning("FORECAST_STALE_READINGS", "Recent temperature readings are stale; no trend forecast is available."))
         return result
-    if span_minutes < minimum_span_minutes:
-        result["warnings"].append(warning("FORECAST_SHORT_HISTORY", "Recent readings do not span enough time to estimate a temperature trend.", "info"))
-        return result
 
     current = float(latest["temperature_c"])
     if current < lower_limit_c or current > upper_limit_c:
-        result.update({"status": "currently_out_of_range", "projected_temperature_c": current})
+        result["status"] = "currently_out_of_range"
+        return result
+    if len(valid) < minimum_readings:
+        result["warnings"].append(warning("FORECAST_INSUFFICIENT_READINGS", "Not enough recent valid readings to estimate a temperature trend.", "info"))
+        return result
+
+    span_minutes = (latest["timestamp"] - valid[0]["timestamp"]).total_seconds() / 60
+    if span_minutes < minimum_span_minutes:
+        result["warnings"].append(warning("FORECAST_SHORT_HISTORY", "Recent readings do not span enough time to estimate a temperature trend.", "info"))
         return result
 
     elapsed = [(row["timestamp"] - latest["timestamp"]).total_seconds() / 60 for row in valid]
@@ -259,10 +264,14 @@ def forecast_temperature_limit_crossing(
     slope_per_hour = slope_per_minute * 60
     projected = current + slope_per_minute * forecast_minutes
     crossing_minutes = None
-    if slope_per_minute > 0 and projected > upper_limit_c:
-        crossing_minutes = (upper_limit_c - current) / slope_per_minute
-    elif slope_per_minute < 0 and projected < lower_limit_c:
-        crossing_minutes = (lower_limit_c - current) / slope_per_minute
+    if slope_per_minute > 0:
+        candidate = (upper_limit_c - current) / slope_per_minute
+        if 0 <= candidate <= forecast_minutes:
+            crossing_minutes = candidate
+    elif slope_per_minute < 0:
+        candidate = (lower_limit_c - current) / slope_per_minute
+        if 0 <= candidate <= forecast_minutes:
+            crossing_minutes = candidate
 
     status = "approaching_limit" if crossing_minutes is not None else "within_limits"
     result.update(
@@ -281,3 +290,56 @@ def forecast_temperature_limit_crossing(
             )
         )
     return result
+
+
+def classify_temperature_warning(
+    summary: dict[str, Any],
+    forecast: dict[str, Any],
+    active_control_signals: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Apply the supervisor warning priority to one refrigerator's current state."""
+    if summary["state"] == "unknown":
+        reason = (
+            "No valid current temperature reading is available."
+            if summary["latest_timestamp_utc"] is None
+            else "The latest temperature reading is stale."
+        )
+        return {
+            "status": "unknown",
+            "label": "Current condition unknown",
+            "reason": reason,
+            "warning_active": True,
+        }
+    if summary["state"] in {"below_limit", "above_limit"}:
+        return {
+            "status": "currently_out_of_range",
+            "label": "Currently outside limits",
+            "reason": "The latest temperature reading is outside the configured storage limits.",
+            "warning_active": True,
+        }
+    if forecast["status"] == "approaching_limit":
+        crossing_minutes = max(0, round(forecast["predicted_minutes_to_limit"] or 0))
+        return {
+            "status": "approaching_limit",
+            "label": f"Limit may be reached in {crossing_minutes} minutes",
+            "reason": "The preceding two hours of valid readings project a storage-limit crossing within 60 minutes.",
+            "warning_active": True,
+        }
+    if active_control_signals:
+        rules = "; ".join(dict.fromkeys(signal["rule"] for signal in active_control_signals))
+        return {
+            "status": "unusual_pattern",
+            "label": "Unusual temperature pattern",
+            "reason": f"Control-chart rule triggered at the latest valid reading: {rules}.",
+            "warning_active": True,
+        }
+    if forecast["status"] == "insufficient_data":
+        reason = "Temperature is within limits; insufficient history for a forecast."
+    else:
+        reason = "Temperature is within limits; the 60-minute estimate does not cross a storage limit."
+    return {
+        "status": "within_limits",
+        "label": "Within limits",
+        "reason": reason,
+        "warning_active": False,
+    }

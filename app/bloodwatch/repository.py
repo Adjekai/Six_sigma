@@ -58,6 +58,7 @@ def load_data(include_live_readings: bool = True) -> dict[str, Any]:
     live_readings = load_temperature_readings() if include_live_readings else []
     live_readings = [row for row in live_readings if row["reading_valid"] and row["temperature_c"] is not None]
     data["live_reading_count"] = len(live_readings)
+    data["live_sources"] = sorted({row["source"] for row in live_readings})
     data["baseline_temperatures"] = baseline_temperatures
     data["temperatures"].extend(live_readings)
     operational = [

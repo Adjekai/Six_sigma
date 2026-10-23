@@ -5,6 +5,7 @@ Usage:
     python scripts/project.py setup
     python scripts/project.py test
     python scripts/project.py run
+    python scripts/project.py run-warning-demo
     python scripts/project.py data
 """
 
@@ -107,10 +108,12 @@ def test() -> None:
     run([str(VENV_PYTHON), "-m", "pytest", "-q"], env=environment)
 
 
-def serve() -> None:
+def serve(simulator_profile: str = "normal") -> None:
     require_setup()
     environment = os.environ.copy()
     environment["PYTHONPATH"] = str(ROOT / "app")
+    dashboard_url = "http://127.0.0.1:8000"
+    print("Starting BloodWatch dashboard...", flush=True)
     server = subprocess.Popen(
         [str(VENV_PYTHON), "-m", "uvicorn", "api:app", "--host", "127.0.0.1", "--port", "8000"],
         cwd=ROOT,
@@ -123,16 +126,28 @@ def serve() -> None:
             if server.poll() is not None:
                 raise ProjectError(f"Dashboard server exited with code {server.returncode}.")
             try:
-                with urlopen("http://127.0.0.1:8000/health", timeout=1):
+                with urlopen(f"{dashboard_url}/health", timeout=1):
                     break
             except (URLError, TimeoutError):
                 time.sleep(0.25)
         else:
             raise ProjectError("Dashboard server did not become ready within 30 seconds.")
 
-        print("Dashboard ready. Starting the simulated temperature feed.", flush=True)
+        print(f"Dashboard ready: {dashboard_url}", flush=True)
+        print("Keep this terminal open. Press Ctrl+C to stop.", flush=True)
+        if simulator_profile == "warning-cycle":
+            print("Starting the SYNTHETIC warning-cycle demonstration (each stage lasts 6 seconds).", flush=True)
+        else:
+            print("Starting the normal simulated temperature feed.", flush=True)
+        simulator_command = [
+            str(VENV_PYTHON), str(ROOT / "scripts" / "stream_temperature.py")
+        ]
+        if simulator_profile == "warning-cycle":
+            simulator_command.extend(["--profile", "warning-cycle", "--stage-seconds", "6"])
+        else:
+            simulator_command.extend(["--interval", "15"])
         simulator = subprocess.Popen(
-            [str(VENV_PYTHON), str(ROOT / "scripts" / "stream_temperature.py"), "--interval", "15"],
+            simulator_command,
             cwd=ROOT,
             env=environment,
         )
@@ -165,7 +180,7 @@ def generate_data() -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Set up, check, test, or run BloodWatch on macOS and Windows.")
-    parser.add_argument("action", choices=("doctor", "setup", "test", "run", "data"))
+    parser.add_argument("action", choices=("doctor", "setup", "test", "run", "run-warning-demo", "data"))
     arguments = parser.parse_args()
     try:
         if arguments.action == "doctor":
@@ -176,6 +191,8 @@ def main() -> int:
             test()
         elif arguments.action == "run":
             serve()
+        elif arguments.action == "run-warning-demo":
+            serve("warning-cycle")
         elif arguments.action == "data":
             generate_data()
     except KeyboardInterrupt:

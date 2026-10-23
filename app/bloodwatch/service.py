@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .incidents import summarize_breach_and_recovery
@@ -9,7 +9,12 @@ from .live_data import rejected_reading_summary
 from .reliability import generator_reliability, refrigerator_reliability
 from .repository import load_data
 from .scenarios import SCENARIOS, load_scenario_data
-from .temperature import analyze_temperature_process, forecast_temperature_limit_crossing, summarize_temperature
+from .temperature import (
+    analyze_temperature_process,
+    classify_temperature_warning,
+    forecast_temperature_limit_crossing,
+    summarize_temperature,
+)
 
 
 def _equipment(periods: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -81,6 +86,7 @@ def build_dashboard(
     if scenario is not None:
         data = load_scenario_data(data, scenario)
     reference = data["reference_time"]
+    freshness_reference = reference if scenario is not None else datetime.now(timezone.utc)
     equipment = _equipment(data["refrigerator_periods"])
     equipment_ids = {row["equipment_id"] for row in equipment}
     refrigerator_id = refrigerator_id or sorted(equipment_ids)[0]
@@ -100,14 +106,14 @@ def build_dashboard(
     selected_summary = None
     for refrigerator in equipment:
         rows = [row for row in window_temperatures if row["refrigerator_id"] == refrigerator["equipment_id"]]
-        summary = summarize_temperature(rows, reference, lower_limit_c, upper_limit_c)
+        summary = summarize_temperature(rows, freshness_reference, lower_limit_c, upper_limit_c)
         recent_rows = [
             row for row in temperatures
             if row["refrigerator_id"] == refrigerator["equipment_id"]
             and reference - timedelta(hours=2) <= row["timestamp"] <= reference
         ]
         forecast = forecast_temperature_limit_crossing(
-            recent_rows, reference, lower_limit_c, upper_limit_c
+            recent_rows, freshness_reference, lower_limit_c, upper_limit_c
         )
         baseline_period = next(
             row for row in data["refrigerator_periods"]
@@ -123,16 +129,35 @@ def build_dashboard(
             if row["refrigerator_id"] == refrigerator["equipment_id"]
             and row["timestamp"] >= baseline_period["period_end"]
         ]
-        process_by_refrigerator[refrigerator["equipment_id"]] = analyze_temperature_process(
+        process = analyze_temperature_process(
             rows, baseline_rows_for_unit, overall_rows_for_unit, lower_limit_c, upper_limit_c
         )
+        process_by_refrigerator[refrigerator["equipment_id"]] = process
+        displayed_sequence = sorted(rows, key=lambda row: row["timestamp"])
+        latest_valid_index = next(
+            (
+                index for index in range(len(displayed_sequence) - 1, -1, -1)
+                if displayed_sequence[index]["reading_valid"]
+                and displayed_sequence[index]["temperature_c"] is not None
+            ),
+            None,
+        )
+        active_control_signals = [
+            signal for signal in process["control_signals"]
+            if signal["index"] == latest_valid_index
+        ]
+        warning_state = classify_temperature_warning(summary, forecast, active_control_signals)
         inventory_value = (
             refrigerator["current_bags"] * refrigerator["value_per_bag_usd"]
             if refrigerator["value_per_bag_usd"] is not None else None
         )
         risk_forecast = {
             "refrigerator_id": refrigerator["equipment_id"],
-            "status": forecast["status"],
+            "status": warning_state["status"],
+            "warning_label": warning_state["label"],
+            "warning_active": warning_state["warning_active"],
+            "decision_support_reason": warning_state["reason"],
+            "forecast_status": forecast["status"],
             "forecast_minutes": forecast["forecast_minutes"],
             "reading_count": forecast["reading_count"],
             "slope_c_per_hour": forecast["slope_c_per_hour"],
@@ -140,7 +165,8 @@ def build_dashboard(
             "projected_temperature_c": forecast["projected_temperature_c"],
             "as_of_utc": forecast["as_of_utc"],
             "method": "Linear fit on recent valid readings (2-hour window)",
-            "control_signals": process_by_refrigerator[refrigerator["equipment_id"]]["control_signals"],
+            "control_signals": process["control_signals"],
+            "active_control_signals": active_control_signals,
             "current_temperature_c": summary["latest_temperature_c"],
             "inventory_bags": refrigerator["current_bags"],
             "inventory_value_usd": inventory_value,
@@ -160,7 +186,7 @@ def build_dashboard(
             status, reasons = "unknown", ["Latest temperature condition is unknown"]
         elif refrigerator["equipment_id"] in data.get("_scenario_review_refrigerators", set()):
             status, reasons = "review_required", ["Observed synthetic scenario excursion requires review"]
-        elif active or summary["state"] in {"below_limit", "above_limit"} or forecast["status"] == "approaching_limit":
+        elif active or warning_state["warning_active"]:
             status = "review_required"
             reasons = []
             if active:
@@ -169,6 +195,8 @@ def build_dashboard(
                 reasons.append("Latest valid temperature is outside storage limits")
             if forecast["status"] == "approaching_limit":
                 reasons.append("Recent temperature trend projects a storage-limit crossing")
+            if warning_state["status"] == "unusual_pattern":
+                reasons.append(warning_state["reason"])
         else:
             status, reasons = "within_limits", ["Latest valid reading is within configured limits"]
         equipment_status.append(
@@ -217,29 +245,6 @@ def build_dashboard(
     for forecast in risk_forecasts:
         equipment_row = next(row for row in equipment if row["equipment_id"] == forecast["refrigerator_id"])
         f30 = group_failure_probability.get(equipment_row["model_group"])
-        signals = forecast["control_signals"]
-        latest = forecast["current_temperature_c"]
-        out_of_range = latest is not None and (latest < lower_limit_c or latest > upper_limit_c)
-        if out_of_range:
-            banner = "At risk"
-            reason = "Latest reading is outside the configured range"
-        elif forecast["status"] == "approaching_limit":
-            banner = "Watch"
-            reason = "Linear estimate projects a limit crossing within 60 minutes"
-        elif signals:
-            banner = "Watch"
-            reason = f"Control-chart signal: {signals[-1]['rule']}"
-        elif f30 is not None and f30 >= 0.10:
-            banner = "Watch"
-            reason = f"Pooled constant-rate F(30 d) estimate is {f30:.1%}"
-        elif latest is None or forecast["status"] in {"unknown", "insufficient_data"}:
-            banner = "Watch"
-            reason = "Latest condition or trend is not known"
-        else:
-            banner = "In range"
-            reason = f"Latest reading is within range; pooled F(30 d) estimate {f30:.1%}" if f30 is not None else "Latest reading is within range"
-        forecast["decision_support_status"] = banner
-        forecast["decision_support_reason"] = reason
         forecast["failure_probability_30d"] = f30
 
     breach_recovery = summarize_breach_and_recovery(incidents, temperatures, lower_limit_c, upper_limit_c)
@@ -298,7 +303,11 @@ def build_dashboard(
             "name": "Blood bank equipment history",
             "synthetic": True,
             "live_reading_count": data["live_reading_count"],
+            "live_sources": data.get("live_sources", []),
+            "synthetic_warning_cycle_active": "simulator-warning-cycle" in data.get("live_sources", []),
             "reference_time_utc": reference.isoformat(),
+            "freshness_reference_time_utc": freshness_reference.isoformat(),
+            "freshness_reference_kind": "replay_reference" if scenario is not None else "current_time",
             "rejected_readings": rejected_reading_summary(),
         },
         "selection": {
@@ -312,6 +321,7 @@ def build_dashboard(
             "temperature_series": selected_series,
             "equipment": equipment_status,
             "risk_forecasts": risk_forecasts,
+            "temperature_warning_count": sum(row["warning_active"] for row in risk_forecasts),
             "inventory_summary": {
                 "bags_present": sum(row["bags_present"] for row in inventory_rows),
                 "lot_count": sum(row["lot_count"] for row in inventory_rows),

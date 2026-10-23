@@ -40,12 +40,15 @@ Python 3.12–3.15 is supported; Python 3.14 or 3.15 is recommended.
 | Create environment, install packages, generate the baseline CSV files | `python3 scripts/project.py setup` | `py scripts\project.py setup` |
 | Check Python and installed packages | `python3 scripts/project.py doctor` | `py scripts\project.py doctor` |
 | Run the dashboard | `python3 scripts/project.py run` | `py scripts\project.py run` |
+| Run the fast synthetic warning demonstration | `python3 scripts/project.py run-warning-demo` | `py scripts\project.py run-warning-demo` |
 | Run the automated checks | `python3 scripts/project.py test` | `py scripts\project.py test` |
 | Regenerate the three baseline CSV files | `python3 scripts/project.py data` | `py scripts\project.py data` |
 
 Open <http://127.0.0.1:8000>. The `run` command starts the dashboard and a simulated temperature feed together. It sends one reading for each refrigerator every 15 seconds, so the incoming-reading count updates automatically. Stop both with Ctrl+C in the terminal.
 
-The feed is synthetic demo data stored in the local SQLite database. Each checkout maintains its own database. To run the simulator separately or change its interval, use `python scripts/stream_temperature.py`; options include `--api-url`, `--interval`, `--refrigerators`, and `--once`.
+The normal feed is synthetic data stored in the local SQLite database. Each checkout maintains its own database. To run the simulator separately or change its interval, use `python scripts/stream_temperature.py`; options include `--api-url`, `--interval`, `--refrigerators`, and `--once`.
+
+`run-warning-demo` is an optional, clearly labeled synthetic demonstration. It repeats **Normal → Warming → Projected crossing → Actual breach → Recovery**, holding each stage for six real seconds while using four UTC readings spaced 30 minutes apart. The dashboard refreshes every three seconds, so the warning label and count change without waiting through a real two-hour trend. The first refrigerator follows the warning cycle while the other two receive stable readings. The demonstration deletes and replaces only rows produced by the bundled simulators; it does not modify the three CSV datasets or other sensor sources. Stop it with Ctrl+C. The regular `run` command continues to use the normal feed near 4 °C.
 
 ### Important assumptions and limitations
 
@@ -209,7 +212,7 @@ Real sources would be utility outage logs, generator controller logs, transfer-s
 
 ### Running, dashboard controls, and API
 
-The browser page refreshes its dashboard data every 15 seconds. Its current controls are:
+The browser page refreshes its dashboard data every three seconds. Its current controls are:
 
 | Control | Effect |
 |---|---|
@@ -217,6 +220,16 @@ The browser page refreshes its dashboard data every 15 seconds. Its current cont
 | Refrigerator to inspect | Changes the unit used for the detailed temperature chart and cooling-interruption summary. |
 | Temperature history | Selects the recent chart window. The browser offers 6 or 24 hours. |
 | Analysis settings | Changes lower/upper temperature status limits and the historical refrigerator failure estimate period. These settings do not modify readings. |
+
+The refrigerator warning table applies one priority order to its label, explanation, and warning count:
+
+1. A missing or stale current reading is **Current condition unknown**.
+2. A current reading outside the configured limits is **Currently outside limits**, even when too few readings exist for a forecast.
+3. A trend crossing within 60 minutes is **Limit may be reached in X minutes**.
+4. A control-chart rule ending at the latest valid reading is **Unusual temperature pattern**.
+5. Otherwise the result is **Within limits**. When trend history is insufficient, the explanation says so instead of claiming that a forecast succeeded.
+
+The projection uses valid readings from the preceding two hours. Incoming-feed freshness is measured against actual current UTC time; historical scenarios use their replay reference time. A control-chart warning clears when the newest valid reading no longer completes any defined rule; older signals remain available in the statistical results but do not keep the current warning active. Historical equipment-failure probability stays in the reliability section and does not trigger a temperature warning. Inventory in the warning table is recorded stock exposure, not confirmed product loss.
 
 #### HTTP routes
 
@@ -254,7 +267,7 @@ The browser page refreshes its dashboard data every 15 seconds. Its current cont
 
 `refrigerator_id` must be known; `timestamp_utc` must include a timezone and cannot be in the future; `temperature_c` must be finite and between −50 and 50 °C; and incoming readings must be valid. `source` defaults to `sensor`. Duplicate refrigerator/timestamp readings are rejected. Invalid, unknown-unit, future, and duplicate submissions are recorded in the rejected-reading summary where applicable.
 
-The dashboard response is grouped under `dataset`, `selection`, `conditions`, `reliability`, `financial_estimates`, and `warnings`. It includes synthetic/live provenance and the reference timestamp so a reader can interpret the estimates in context.
+The dashboard response is grouped under `dataset`, `selection`, `conditions`, `reliability`, `financial_estimates`, and `warnings`. It includes synthetic/live provenance, the data reference timestamp, the freshness-reference type, unified per-refrigerator warning fields, and `temperature_warning_count`.
 
 ### Function reference
 
@@ -294,8 +307,9 @@ The constants `REFERENCE`, `BASELINE_START`, `BASELINE_END`, and `REFRIGERATORS`
 
 | Function | INPUT / PARAMETERS | OUTPUT / behavior |
 |---|---|---|
-| `send_reading(api_url, refrigerator_id, temperature_c)` | API base URL, known unit ID, temperature value. | Posts one timestamped reading with `source="simulator"`; prints the result or lets network errors reach the caller. |
-| `main()` | CLI options: `--api-url` (default localhost API), `--interval` seconds (default 15), `--refrigerators` comma-separated IDs (default `R1,R2,R3`), `--once`. | Produces a smooth, noisy synthetic temperature near 4 °C for each unit per cycle. `--once` exits after one cycle. |
+| `send_reading(api_url, refrigerator_id, temperature_c, timestamp=None, source="simulator")` | API base URL, known unit ID, temperature, optional aware UTC timestamp and source. | Posts one reading and prints its timestamp, unit, and °C value. |
+| `send_warning_cycle_stage(api_url, refrigerator_ids, stage, temperatures)` | API URL, units, labeled stage, and four temperatures. | Replaces bundled-simulator rows with a repeatable four-reading snapshot for the current stage. |
+| `main()` | Adds `--profile normal|warning-cycle` and `--stage-seconds` to the existing simulator options. | Normal mode stays near 4 °C. Warning-cycle mode repeats five labeled stages; `--once` runs one complete cycle. |
 
 #### `app/api.py` — HTTP interface
 
@@ -318,6 +332,7 @@ The constants `REFERENCE`, `BASELINE_START`, `BASELINE_END`, and `REFRIGERATORS`
 |---|---|---|
 | `summarize_temperature(rows, reference_time, lower_limit_c=1.0, upper_limit_c=6.0, stale_after_minutes=30.0)` | Reading dictionaries, reference datetime, limits, and freshness cutoff. | Latest reading, count, mean/range/sample deviation, freshness, state, and warnings. Invalid/missing readings are excluded from statistics. |
 | `forecast_temperature_limit_crossing(rows, reference_time, lower_limit_c=1.0, upper_limit_c=6.0, forecast_minutes=60.0, stale_after_minutes=30.0, minimum_readings=4, minimum_span_minutes=30.0)` | Recent reading dictionaries, as-of datetime, limits, forecast horizon, freshness and minimum-data thresholds. | Status, linear-fit slope, projected temperature, estimated minutes to a limit, and warnings. Returns unknown/insufficient status when data is stale or inadequate. |
+| `classify_temperature_warning(summary, forecast, active_control_signals)` | Current summary, trend result, and control signals ending at the latest valid reading. | One ordered warning status, visible label, matching reason, and `warning_active` flag. |
 | `analyze_temperature_process(displayed_rows, baseline_rows, overall_rows, lower_limit_c=1.0, upper_limit_c=6.0)` | Recent displayed readings, documented normal-baseline rows, complete operational rows, and specification limits. | Process-control/capability metrics and signals. Baseline moving ranges set the control limits; full operational data is used for overall capability measures. This result remains part of the API response though the advanced UI panel was removed. |
 
 **Cooling incidents (`incidents.py`)**

@@ -6,8 +6,13 @@ import pytest
 from bloodwatch.financial import expected_annual_blackout_loss, expected_inventory_loss
 from bloodwatch.incidents import summarize_breach_and_recovery
 from bloodwatch.reliability import generator_reliability, refrigerator_reliability
-from bloodwatch.temperature import forecast_temperature_limit_crossing, summarize_temperature
-from bloodwatch.temperature import analyze_temperature_process
+from bloodwatch.temperature import (
+    analyze_temperature_process,
+    classify_temperature_warning,
+    forecast_temperature_limit_crossing,
+    summarize_temperature,
+)
+from scripts.stream_temperature import WARNING_CYCLE
 
 
 UTC = timezone.utc
@@ -156,11 +161,89 @@ def test_temperature_forecast_flags_limit_crossing():
     assert result["as_of_utc"] == rows[-1]["timestamp"].isoformat()
 
 
+def test_temperature_forecast_includes_crossing_at_60_minute_boundary():
+    reference = datetime(2026, 1, 1, 1, 30, tzinfo=UTC)
+    rows = [reading(minutes, temperature) for minutes, temperature in ((0, 4.75), (30, 5.0), (60, 5.25), (90, 5.5))]
+    result = forecast_temperature_limit_crossing(rows, reference)
+    assert result["status"] == "approaching_limit"
+    assert result["predicted_minutes_to_limit"] == pytest.approx(60)
+
+
 def test_temperature_forecast_requires_fresh_sufficient_data():
     reference = datetime(2026, 1, 1, 2, 0, tzinfo=UTC)
     rows = [reading(minutes, 4.0) for minutes in (0, 15, 30, 45)]
     assert forecast_temperature_limit_crossing(rows, reference)["status"] == "unknown"
-    assert forecast_temperature_limit_crossing(rows[:3], reference)["status"] == "insufficient_data"
+    assert forecast_temperature_limit_crossing(rows[:3], rows[2]["timestamp"])["status"] == "insufficient_data"
+
+
+def test_immediate_breach_detection_does_not_require_forecast_history():
+    row = reading(0, 6.2)
+    result = forecast_temperature_limit_crossing([row], row["timestamp"])
+    assert result["status"] == "currently_out_of_range"
+    assert result["reading_count"] == 1
+    assert result["projected_temperature_c"] is None
+
+
+def test_warning_priority_statuses_reasons_and_recovery():
+    baseline = [reading(index * 15, 3.96 + (index % 2) * .08) for index in range(20)]
+    expected = {
+        "Normal": "within_limits",
+        "Warming": "unusual_pattern",
+        "Projected crossing": "approaching_limit",
+        "Actual breach": "currently_out_of_range",
+        "Recovery": "within_limits",
+    }
+    results = {}
+    for stage, values in WARNING_CYCLE:
+        rows = [reading(offset, value) for offset, value in zip((0, 30, 60, 90), values)]
+        reference = rows[-1]["timestamp"]
+        summary = summarize_temperature(rows, reference)
+        forecast = forecast_temperature_limit_crossing(rows, reference)
+        process = analyze_temperature_process(rows, baseline, rows)
+        active = [signal for signal in process["control_signals"] if signal["index"] == len(rows) - 1]
+        results[stage] = classify_temperature_warning(summary, forecast, active)
+        assert results[stage]["status"] == expected[stage]
+
+    assert results["Projected crossing"]["label"].startswith("Limit may be reached in ")
+    assert results["Actual breach"]["label"] == "Currently outside limits"
+    assert results["Recovery"]["label"] == "Within limits"
+    assert sum(result["warning_active"] for result in results.values()) == 3
+
+
+def test_warning_unknown_insufficient_history_and_control_rule_clear():
+    reference = datetime(2026, 1, 1, 1, tzinfo=UTC)
+    missing = summarize_temperature([], reference)
+    no_forecast = forecast_temperature_limit_crossing([], reference)
+    unknown = classify_temperature_warning(missing, no_forecast, [])
+    assert unknown == {
+        "status": "unknown",
+        "label": "Current condition unknown",
+        "reason": "No valid current temperature reading is available.",
+        "warning_active": True,
+    }
+
+    current_row = reading(60, 4.0)
+    current = summarize_temperature([current_row], reference)
+    insufficient = forecast_temperature_limit_crossing([current_row], reference)
+    within = classify_temperature_warning(current, insufficient, [])
+    assert within["status"] == "within_limits"
+    assert within["reason"] == "Temperature is within limits; insufficient history for a forecast."
+
+    signal = {"index": 0, "value_c": 4.0, "rule": "3-sigma control limit"}
+    unusual = classify_temperature_warning(current, insufficient, [signal])
+    assert unusual["status"] == "unusual_pattern"
+    assert "3-sigma control limit" in unusual["reason"]
+    assert classify_temperature_warning(current, insufficient, [])["warning_active"] is False
+
+
+def test_stale_out_of_range_reading_is_unknown_before_breach():
+    row = reading(0, 6.4)
+    reference = row["timestamp"] + timedelta(minutes=31)
+    summary = summarize_temperature([row], reference)
+    forecast = forecast_temperature_limit_crossing([row], reference)
+    result = classify_temperature_warning(summary, forecast, [])
+    assert result["status"] == "unknown"
+    assert result["label"] == "Current condition unknown"
 
 
 def test_breach_detection_and_recovery_are_distinct():

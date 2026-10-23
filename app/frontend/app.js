@@ -82,26 +82,31 @@ function overview(data) {
   const fullestInventory=Math.max(...inventory.by_refrigerator.map(row=>row.bags_present),1);
   const inventoryRows=inventory.by_refrigerator.map(row=>`<tr><td><strong>${esc(refrigeratorName(row.refrigerator_id))}</strong><br><small>${esc(refrigeratorCode(row.refrigerator_id))}</small></td><td><div class="blood-level" title="${num(row.bags_present,0)} bags; relative to the fullest refrigerator"><span class="blood-level-fill" style="width:${row.bags_present/fullestInventory*100}%"></span><strong>${num(row.bags_present,0)} bags</strong></div></td><td>${row.lot_count}</td><td>${usd(row.inventory_value_usd)}</td></tr>`).join('');
   const riskRows=riskForecasts.map(row=>{
-    const signal=row.status==='approaching_limit'?`Limit may be reached in ${minutes(row.predicted_minutes_to_limit/60)}`:row.status==='currently_out_of_range'?'Currently outside limits':row.status==='within_limits'?'No crossing projected':row.status==='insufficient_data'?'Need more readings':'Readings are stale';
     const current=row.current_temperature_c==null?'Unknown':`${num(row.current_temperature_c)} °C`;
     const projected=row.projected_temperature_c==null?'Unavailable':`${num(row.projected_temperature_c)} °C`;
     const slope=row.slope_c_per_hour==null?'unavailable':`${num(row.slope_c_per_hour,3)} C/h`;
-    return `<tr><td data-label="Refrigerator"><strong>${esc(refrigeratorName(row.refrigerator_id))}</strong></td><td data-label="Status"><span class="risk-signal risk-signal--${esc(row.status)}">${esc(signal)}</span><details id="risk-row-${esc(row.refrigerator_id)}" class="risk-row-info"><summary>Why this status?</summary><p>${esc(row.decision_support_reason)}</p><p>Trend estimate uses ${num(row.reading_count,0)} readings · ${slope}${row.as_of_utc?` · ${esc(fullTimestamp(row.as_of_utc))}`:''}</p></details></td><td data-label="Temperature now → projected">${current} → ${projected}</td><td data-label="Inventory at this unit">${usd(row.inventory_value_usd)} · ${num(row.inventory_bags,0)} bags</td></tr>`;
+    return `<tr><td data-label="Refrigerator"><strong>${esc(refrigeratorName(row.refrigerator_id))}</strong></td><td data-label="Status"><span class="risk-signal risk-signal--${esc(row.status)}">${esc(row.warning_label)}</span><details id="risk-row-${esc(row.refrigerator_id)}" class="risk-row-info"><summary>Why this status?</summary><p>${esc(row.decision_support_reason)}</p><p>60-minute estimate: preceding two hours of valid readings · ${num(row.reading_count,0)} readings · ${slope}${row.as_of_utc?` · latest ${esc(fullTimestamp(row.as_of_utc))}`:''}</p></details></td><td data-label="Temperature now → estimated in 60 minutes">${current} → ${projected}</td><td data-label="Recorded inventory">${usd(row.inventory_value_usd)} · ${num(row.inventory_bags,0)} bags</td></tr>`;
   }).join('');
-  const flaggedForecasts=riskForecasts.filter(row=>['approaching_limit','currently_out_of_range'].includes(row.status)).length;
+  const flaggedForecasts=data.conditions.temperature_warning_count;
+  const feedLabel=data.dataset.synthetic_warning_cycle_active
+    ? 'Synthetic warning-cycle demonstration · refreshes every 3 s'
+    : `${num(data.dataset.live_reading_count,0)} incoming readings · refreshes every 3 s`;
+  const selectedRefrigerator=state.refrigeratorId||data.selection.refrigerator_id;
+  const refrigeratorOptions=data.selection.available_refrigerators.map(id=>`<option value="${esc(id)}"${id===selectedRefrigerator?' selected':''}>${esc(refrigeratorName(id))} (${esc(refrigeratorCode(id))})</option>`).join('');
   const overviewPanel=`<section class="ops-summary" aria-label="Supply status">
-    <div class="summary-heading"><div><p class="eyebrow">Regional blood storage</p><h2>Blood supply overview</h2></div><span class="live-indicator"><i></i>${num(data.dataset.live_reading_count,0)} incoming readings · refreshes every 15 s</span></div>
+    <div class="summary-heading"><div><p class="eyebrow">Regional blood storage</p><h2>Blood supply overview</h2></div><span class="live-indicator"><i></i>${esc(feedLabel)}</span></div>
     <div class="summary-strip">
       <div><span>Inventory</span><strong>${num(inventory.bags_present,0)} bags</strong><small>${inventory.lot_count} lots · ${usd(inventory.inventory_value_usd)}</small></div>
       <div><span>Refrigerators</span><strong>${within} / ${equipment.length} in range</strong><small>${review} review · ${unknown} unknown</small></div>
       <div><span>Selected unit</span><strong>${num(s.latest_temperature_c)} °C</strong><small>${esc(status)} · ${s.latest_timestamp_utc?fullTimestamp(s.latest_timestamp_utc):'No recent reading'}</small></div>
       <div><span>Estimated refrigerator failure risk</span><strong>${pct(fridge.failure_probability)}</strong><small>Next ${state.horizonDays} operating days · modeled inventory exposure ${usd(selectedExpectedLoss)}</small></div>
     </div>
-    <div class="risk-watch"><div><h3>Refrigerator warnings</h3><strong class="warning-count">${flaggedForecasts} warning${flaggedForecasts===1?'':'s'}</strong><details id="risk-watch-info" class="risk-info"><summary>What do the warnings mean?</summary><p>Warnings flag an out-of-limit reading, projected crossing, or process-control signal. Investigate them; they do not confirm equipment failure or blood safety. Projections use the recent two-hour trend.</p></details></div><div class="table-wrap"><table><thead><tr><th>Unit</th><th>Status / details</th><th>Temperature now → projected</th><th>Inventory at this unit</th></tr></thead><tbody>${riskRows}</tbody></table></div></div>
+    <div class="risk-watch"><div><h3>Refrigerator warnings</h3><strong class="warning-count">${flaggedForecasts} warning${flaggedForecasts===1?'':'s'}</strong><details id="risk-watch-info" class="risk-info"><summary>What do the warnings mean?</summary><p>Warnings flag an unknown current condition, observed limit breach, projected crossing, or active control-chart rule. The estimate uses the preceding two hours of valid readings. Inventory is stock recorded in the refrigerator, not confirmed loss.</p></details></div><div class="table-wrap"><table><thead><tr><th>Unit</th><th>Status / details</th><th>Temperature now → estimated in 60 minutes</th><th>Recorded inventory in refrigerator</th></tr></thead><tbody>${riskRows}</tbody></table></div></div>
     <p class="generator-summary">${state.mode==='live'?'Live readings are combined with sample CSV equipment and failure history. Estimates do not determine product safety or disposition.':'Synthetic demo data for learning; results do not determine product safety or disposition.'}</p>
     <details id="inventory-details" class="secondary-details"><summary>View inventory for each refrigerator</summary><div class="table-wrap"><table><thead><tr><th>Refrigerator</th><th>Relative stock</th><th>Lots</th><th>Value</th></tr></thead><tbody>${inventoryRows}</tbody></table></div></details>
   </section>`;
-  const sections=`<section class="panel temperature-panel"><div class="temperature-heading"><div><p class="eyebrow">Selected refrigerator</p><h2>${esc(refrigeratorName(state.refrigeratorId||data.selection.refrigerator_id))}</h2></div><span class="condition-tag condition-tag--${esc(s.state)}">${esc(status)}</span></div>
+  const sections=`<section class="panel temperature-panel"><div class="temperature-heading"><div><p class="eyebrow">Refrigerator temperature history</p><h2>${esc(refrigeratorName(selectedRefrigerator))}</h2></div><span class="condition-tag condition-tag--${esc(s.state)}">${esc(status)}</span></div>
+    <div class="temperature-controls"><label>Refrigerator to inspect<select id="refrigerator" ${state.busy?'disabled':''}>${refrigeratorOptions}</select></label><label>Temperature history<select id="window" ${state.busy?'disabled':''}>${[6,24].map(v=>`<option value="${v}"${v===state.windowHours?' selected':''}>Last ${v} hours</option>`).join('')}</select></label></div>
     <div class="metric-grid three">
       ${card('Latest',s.latest_temperature_c==null?'Unknown':`${num(s.latest_temperature_c)} °C`,`${esc(status)} · ${s.latest_timestamp_utc?fullTimestamp(s.latest_timestamp_utc):''}`)}
       ${card('Average',`${num(s.mean_c)} °C`,`${num(s.minimum_c)}–${num(s.maximum_c)} °C`)}
@@ -162,7 +167,11 @@ function liveStatusNote(data) {
   const reference=fullTimestamp(data.dataset.reference_time_utc);
   const ageMinutes=(Date.now()-Date.parse(data.dataset.reference_time_utc))/60000;
   const freshness=Number.isFinite(ageMinutes)?`${num(ageMinutes)} min as of computer time`:'unavailable';
-  const freshnessText=data.dataset.live_reading_count ? `Live mode combines the three CSV history datasets with ${data.dataset.live_reading_count} sensor readings; latest data ${reference}.` : `No live sensor connected. Showing the three CSV history datasets through ${reference}; latest reading age ${freshness}.`;
+  const freshnessText=data.dataset.synthetic_warning_cycle_active
+    ? `Synthetic warning-cycle demonstration is active; its latest timestamp is ${reference} and freshness is measured against the actual current time.`
+    : data.dataset.live_reading_count
+      ? `Incoming-feed mode combines the three CSV history datasets with ${data.dataset.live_reading_count} sensor readings; latest data ${reference}. Freshness is measured against the actual current time.`
+      : `No incoming sensor reading is available. Showing the three CSV history datasets through ${reference}; latest reading age ${freshness}.`;
   return `<p class="mode-note">${esc(freshnessText)}</p>`;
 }
 
@@ -170,25 +179,21 @@ function render() {
   const openDetails=[...root.querySelectorAll('details[open]')].map(item=>item.id);
   const data=state.data;
   const content=data?overview(data):null;
-  const selectedRefrigerator=state.refrigeratorId||data?.selection.refrigerator_id||'';
-  const fridgeOptions=state.availableRefrigerators.length
-    ? state.availableRefrigerators.map(id=>`<option value="${esc(id)}"${id===selectedRefrigerator?' selected':''}>${esc(refrigeratorName(id))} (${esc(refrigeratorCode(id))})</option>`).join('')
-    : `<option value="">${state.error?'Refrigerators unavailable':'Loading refrigerators…'}</option>`;
   root.innerHTML=`<main><header class="masthead"><div><p class="eyebrow">Regional blood storage · supply integrity</p><h1>BloodWatch</h1></div><span class="masthead-site">Temperature · equipment · inventory</span></header>
-    <section class="controls" aria-label="Dashboard controls"><label class="mode-control">Data view<select id="mode" class="mode-select" ${state.busy?'disabled':''}><option value="live"${state.mode==='live'?' selected':''}>CSV history + incoming readings</option><optgroup label="Synthetic demo scenarios"><option value="stable"${state.mode==='stable'?' selected':''}>Stable conditions</option><option value="degrading_refrigerator"${state.mode==='degrading_refrigerator'?' selected':''}>Refrigerator cooling failure</option><option value="blackout_failed_generator"${state.mode==='blackout_failed_generator'?' selected':''}>Blackout with failed generator</option></optgroup></select></label><label>Refrigerator to inspect<select id="refrigerator" ${state.busy?'disabled':''}>${fridgeOptions}</select></label><label>Temperature history<select id="window" ${state.busy?'disabled':''}>${[6,24].map(v=>`<option value="${v}"${v===state.windowHours?' selected':''}>Last ${v} hours</option>`).join('')}</select></label></section>
+    <section class="controls" aria-label="Dashboard controls"><label class="mode-control">Data view<select id="mode" class="mode-select" ${state.busy?'disabled':''}><option value="live"${state.mode==='live'?' selected':''}>CSV history + incoming readings</option><optgroup label="Synthetic demo scenarios"><option value="stable"${state.mode==='stable'?' selected':''}>Stable conditions</option><option value="degrading_refrigerator"${state.mode==='degrading_refrigerator'?' selected':''}>Refrigerator cooling failure</option><option value="blackout_failed_generator"${state.mode==='blackout_failed_generator'?' selected':''}>Blackout with failed generator</option></optgroup></select></label></section>
     <section class="welcome-note" aria-label="Getting started"><div><strong>Start here</strong><span>Check overall stock and unit status below, then choose a refrigerator to inspect its temperature history.</span></div><details id="data-source-information" class="data-source-information"><summary>About the datasets and live readings</summary><div><p><strong>blood_temperature.csv</strong> provides recorded refrigerator temperatures. <strong>refrigerator_failures.csv</strong> provides equipment operating time, failures, and inventory. <strong>generator_failures.csv</strong> provides blackout demands and generator start results.</p><p><strong>Live readings</strong> are sensor readings stored in the local database. In the “CSV history + incoming readings” view, they are added to the historical temperature records; they do not replace or change the CSV files. Synthetic scenarios remain separate and are clearly labeled.</p></div></details></section>
     <details id="analysis-settings" class="limit-help"><summary>Change analysis limits and estimate period</summary><p class="settings-intro">These settings change how the dashboard evaluates readings and historical risk; they do not alter the source data or refresh rate.</p><div class="analysis-settings-grid"><label>Failure risk estimate period<select id="horizon" ${state.busy?'disabled':''}>${[7,30,90].map(days=>`<option value="${days}"${days===state.horizonDays?' selected':''}>Next ${days} operating days</option>`).join('')}</select><small>Historical model horizon, not a countdown to equipment failure.</small></label><label>Lower temperature limit (°C)<input id="lower-limit" type="number" min="-50" max="49.9" step="0.1" value="${state.lowerLimit}"><small>Readings below this value are flagged.</small></label><label>Upper temperature limit (°C)<input id="upper-limit" type="number" min="-49.9" max="50" step="0.1" value="${state.upperLimit}"><small>Readings above this value are flagged.</small></label></div><details class="product-ranges"><summary>Examples of product storage ranges</summary><p>Red cells: 1–6 °C. Platelets: approximately 20–24 °C. Frozen plasma: −18 °C or colder. Confirm the applicable product and local policy before changing limits.</p></details></details>
     ${state.mode==='live'&&data?liveStatusNote(data):state.mode!=='live'&&data?.scenario?scenarioPanel(data.scenario,data):''}
     ${content?.overviewPanel||''}
-    <div aria-live="polite">${state.error?`<p class="error" role="alert">${esc(state.error)}</p>`:content?`<p class="context">Computer local time: <span id="current-time">${esc(currentTimestamp())}</span> · Data timestamp (UTC): ${data.dataset.reference_time_utc?fullTimestamp(data.dataset.reference_time_utc):"Unavailable"}${state.busy?' · Refreshing':''}</p>${content.sections}`:'<p class="loading">Loading dashboard…</p>'}</div>
+    <div aria-live="polite">${state.error?`<p class="error" role="alert">${esc(state.error)}</p>`:content?`<p class="context">${state.mode==='live'?`Incoming-feed freshness uses current time: <span id="current-time">${esc(currentTimestamp())}</span>`:`Historical demonstration replay reference: ${data.dataset.reference_time_utc?fullTimestamp(data.dataset.reference_time_utc):"Unavailable"}`}${state.busy?' · Refreshing':''}</p>${content.sections}`:'<p class="loading">Loading dashboard…</p>'}</div>
     <footer><strong>Class project demonstration.</strong> Baseline datasets and scenarios are synthetic. Alerts and risk estimates are decision-support examples; a qualified person must assess any real storage excursion.</footer></main>`;
   for(const id of openDetails) {
     const element=document.getElementById(id);
     if(element) element.open=true;
   }
   root.querySelector('#mode').addEventListener('change',e=>{state.mode=e.target.value;loadDashboard();});
-  root.querySelector('#refrigerator').addEventListener('change',e=>{state.refrigeratorId=e.target.value;loadDashboard();});
-  root.querySelector('#window').addEventListener('change',e=>{state.windowHours=Number(e.target.value);loadDashboard();});
+  root.querySelector('#refrigerator')?.addEventListener('change',e=>{state.refrigeratorId=e.target.value;loadDashboard();});
+  root.querySelector('#window')?.addEventListener('change',e=>{state.windowHours=Number(e.target.value);loadDashboard();});
   root.querySelector('#horizon')?.addEventListener('change',e=>{state.horizonDays=Number(e.target.value);loadDashboard();});
   root.querySelector('#lower-limit')?.addEventListener('change',e=>{state.lowerLimit=Number(e.target.value);loadDashboard();});
   root.querySelector('#upper-limit')?.addEventListener('change',e=>{state.upperLimit=Number(e.target.value);loadDashboard();});
@@ -215,4 +220,4 @@ setInterval(() => {
 },1000);
 setInterval(() => {
   if(!state.busy) loadDashboard();
-},15000);
+},3000);
